@@ -155,7 +155,7 @@ When the native Apple security-key domain is configured, iPadOS handles your usu
 FIDO2 PIN and key touch in its system sheet. Vow has no PIN field in this path.
 This supports older USB security keys without direct CCID FIDO2 support. Activation
 requires a controlled HTTPS domain and an associated-domain-capable signing profile;
-the current configuration uses `axel.md`. See
+the current configuration uses `vow.scarce.sh`. See
 [native-key configuration](services/native-key-association/README.md). Offline
 registration and assertions still require validation on the physical iPad.
 

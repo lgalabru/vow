@@ -59,9 +59,9 @@ FIDO2 and compatible PIV credentials sign local approvals; production attestatio
   verification, pinned HTTPS RP, v3 enrollment and Rust WebAuthn verification.
 - [x] Simulator fixture coverage for native enrollment, approval and cancellation;
   compile current iPad hardware and Mac builds.
-- [x] Owner selected `axel.md`; association file deployed and verified over HTTPS.
+- [x] Owner selected `vow.scarce.sh`; association file deployed and verified over HTTPS.
 - [x] Enable associated-domain provisioning and deliver the activated build wirelessly.
-  Signed entitlement and Info.plist match `axel.md`; Apple CDN serves the association.
+  Signed entitlement and Info.plist match `vow.scarce.sh`; Apple CDN serves the association.
 - [ ] Physical native-key acceptance: usual PIN, USB touch, offline registration and
   assertions, cancellation/removal, interrupted setup and public-record restore.
   Simulator fixtures do not establish these guarantees.

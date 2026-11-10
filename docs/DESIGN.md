@@ -383,7 +383,7 @@ HTTPS RP as the app entitlement, validates the client-data origin, type and chal
 and verifies the returned authenticator signature. Enrollment v3 carries the raw
 client JSON. See [ADR 0006](adr/0006-use-native-apple-external-security-keys.md).
 
-The configured RP is `axel.md`; its public association was deployed and verified
+The configured RP is `vow.scarce.sh`; its public association was deployed and verified
 on 2026-11-10. Physical acceptance is pending. The deployment procedure and association file
 are in `services/native-key-association/`. Initial association retrieval happens
 online; strictly offline registration and assertions remain physical acceptance

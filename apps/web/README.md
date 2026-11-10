@@ -44,8 +44,9 @@ without a redirect, and includes `4HY7TSGF6M.org.vow.prototype`.
 The header is defined in `next.config.mjs`; Playwright checks both the response
 and its exact app identifier. Never remove this file from later deployments.
 
-The installed iPad build currently uses `axel.md`. Hosting this file on the new
-site does not migrate existing credentials or change the iPad's pinned RP.
-Enable `vow.scarce.sh` only after DNS/HTTPS and the association have been verified,
-and treat a changed RP as deliberate re-enrollment. See
+The iPad build now pins `vow.scarce.sh` in Rust, Info.plist and the signed
+Associated Domains entitlement. The previous prototype used `axel.md`.
+Credentials are RP-specific: an existing credential for that previous domain
+cannot silently migrate. The app never resets a YubiKey PIN or replaces an
+enrolled device identity automatically. See
 `services/native-key-association/README.md` at the repository root.
