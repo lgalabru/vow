@@ -7,11 +7,12 @@
     let isConnected: Bool
     let isChecking: Bool
     let detail: String
+    var compact = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var inserted = false
     private var motionID: Int { (isConnected ? 1 : 0) + (reduceMotion ? 2 : 0) }
     var body: some View {
-      HStack(spacing: 14) {
+      HStack(spacing: compact ? 8 : 14) {
         ZStack {
           Image(systemName: "ipad.gen2.landscape")
             .font(.system(size: 46, weight: .light))
@@ -31,7 +32,10 @@
               }
           }.rotationEffect(.degrees(-90))
             .position(x: 86 + (inserted ? -14 : 0), y: 28)
-        }.frame(width: 112, height: 56).accessibilityHidden(true)
+        }.frame(width: 112, height: 56)
+          .scaleEffect(compact ? 0.55 : 1)
+          .frame(width: compact ? 62 : 112, height: compact ? 36 : 56)
+          .accessibilityHidden(true)
         VStack(alignment: .leading, spacing: 4) {
           HStack(spacing: 6) {
             if isConnected { Image(systemName: "checkmark.circle.fill").foregroundStyle(.green) }
@@ -39,13 +43,15 @@
               isConnected
                 ? "YubiKey connected" : isChecking ? "Connecting YubiKey…" : "Connect YubiKey"
             )
-            .font(.subheadline.weight(.semibold))
+            .font((compact ? Font.caption : Font.subheadline).weight(.semibold))
           }
-          Text(isConnected ? "USB-C connection confirmed" : detail)
-            .font(.caption).foregroundStyle(.secondary)
-        }.frame(maxWidth: .infinity, alignment: .leading)
+          if !compact {
+            Text(isConnected ? "USB-C connection confirmed" : detail)
+              .font(.caption).foregroundStyle(.secondary)
+          }
+        }.frame(maxWidth: compact ? nil : .infinity, alignment: .leading)
       }
-      .padding(.horizontal, 16).padding(.vertical, 8)
+      .padding(.horizontal, compact ? 10 : 16).padding(.vertical, compact ? 4 : 8)
       .background(
         isConnected ? Color.green.opacity(0.07) : Color.secondary.opacity(0.06),
         in: RoundedRectangle(cornerRadius: 18)

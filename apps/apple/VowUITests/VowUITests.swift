@@ -66,12 +66,16 @@ final class VowUITests: XCTestCase {
       XCTAssertTrue(app.staticTexts["Review request"].waitForExistence(timeout: 5))
       XCTAssertEqual(app.buttons.matching(identifier: "networkStatus").count, 1)
       XCTAssertEqual(app.buttons.matching(identifier: "requestCountdown").count, 1)
+      assertFooterSeparation(app, action: app.buttons["Continue"], inline: true)
+      XCTAssertEqual(
+        app.buttons["Continue"].frame.maxX,
+        app.windows.firstMatch.frame.maxX - 16, accuracy: 3)
       app.buttons["Continue"].tap()
       XCTAssertTrue(
         app.descendants(matching: .any)["authorizationRequestPanel"].firstMatch.waitForExistence(
           timeout: 5))
       XCTAssertFalse(app.buttons["authorizeApproval"].isEnabled)
-      assertFooterSeparation(app, action: app.buttons["authorizeApproval"])
+      assertFooterSeparation(app, action: app.buttons["authorizeApproval"], inline: true)
       capture(app, "iPad — Handwritten consent")
       let canvas = app.descendants(matching: .any)["consentCanvas"].firstMatch
       XCTAssertTrue(canvas.waitForExistence(timeout: 5))
@@ -93,28 +97,34 @@ final class VowUITests: XCTestCase {
       app.buttons["Continue"].tap()
       expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: approve)
       waitForExpectations(timeout: 5)
-      assertFooterSeparation(app, action: approve)
+      assertFooterSeparation(app, action: approve, inline: true)
       capture(app, "iPad — Consent checks passed to authorize")
       approve.tap()
       XCTAssertTrue(app.staticTexts["Approval created"].waitForExistence(timeout: 10))
       XCTAssertTrue(app.buttons["Share Approval"].waitForExistence(timeout: 5))
-      assertFooterSeparation(app, action: app.buttons["Share Approval"])
+      assertFooterSeparation(app, action: app.buttons["Share Approval"], inline: true)
       capture(app, "iPad — Approval created")
     #endif
   }
   #if os(iOS)
     private func assertFooterSeparation(
-      _ app: XCUIApplication, action: XCUIElement,
+      _ app: XCUIApplication, action: XCUIElement, inline: Bool = false,
       file: StaticString = #filePath, line: UInt = #line
     ) {
       let status = app.buttons["networkStatus"]
       XCTAssertEqual(
         app.buttons.matching(identifier: "networkStatus").count, 1, file: file, line: line)
       XCTAssertTrue(action.exists, file: file, line: line)
-      XCTAssertLessThanOrEqual(
-        action.frame.maxY + 8, status.frame.minY,
-        "Action buttons must sit above the connection strip with a visible gap.", file: file,
-        line: line)
+      if inline {
+        XCTAssertEqual(action.frame.midY, status.frame.midY, accuracy: 3, file: file, line: line)
+        XCTAssertGreaterThanOrEqual(
+          action.frame.minX, status.frame.maxX + 8, file: file, line: line)
+      } else {
+        XCTAssertLessThanOrEqual(
+          action.frame.maxY + 8, status.frame.minY,
+          "Action buttons must sit above the connection strip with a visible gap.", file: file,
+          line: line)
+      }
     }
     private func setConnection(_ app: XCUIApplication, connected: Bool) {
       app.buttons["testConnection"].tap()
@@ -168,7 +178,7 @@ final class VowUITests: XCTestCase {
       waitForExpectations(timeout: 5)
       authorize.tap()
       XCTAssertTrue(app.buttons["Authorizing…"].waitForExistence(timeout: 3))
-      assertFooterSeparation(app, action: app.buttons["Authorizing…"])
+      assertFooterSeparation(app, action: app.buttons["Authorizing…"], inline: true)
       capture(app, "iPad — Signing footer")
       setConnection(app, connected: true)
       XCTAssertTrue(app.staticTexts["Network connection detected"].waitForExistence(timeout: 5))

@@ -306,7 +306,10 @@ The iPad approval uses a full-screen Review → Authorize → Export flow.
 The authorization step uses a fixed two-column layout: request, destination and
 quorum details on the left; the signature canvas and verification status on the
 right. Neither column scrolls on iPad mini in portrait or landscape. Footer actions
-and the connection/countdown strip remain outside the canvas. UI labels use
+and the connection controls remain outside the canvas. In the approval assistant,
+the compact timeline occupies the navigation title slot. The pill, countdown,
+Back and Continue/Authorize/Share actions share one bottom row with matching side
+insets. The connection popover is anchored to the pill button itself. UI labels use
 direct enrollment, review and authorization terminology across both apps.
 The review captures the request digest, requires a nonempty drawing, then signs
 Rust-prepared bytes. Back navigation allows revision before signing; backgrounding

@@ -619,7 +619,6 @@
     var body: some View {
       NavigationStack {
         VStack(spacing: 0) {
-          FlowBreadcrumb(steps: steps, current: step, compact: true).padding(.horizontal, 24)
           if step == 1 {
             authorizationLayout
           } else {
@@ -681,13 +680,14 @@
             }
           }
           approvalFooter
-          NetworkStatusBar(countdown: step < 2 ? model.state?.proposal?.statusCountdown : nil)
-            .fixedSize(horizontal: false, vertical: true)
         }
         .background(Color(uiColor: .systemGroupedBackground))
         .ignoresSafeArea(.container, edges: .bottom)
-        .navigationTitle("Request approval").navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("").navigationBarTitleDisplayMode(.inline)
         .toolbar {
+          ToolbarItem(placement: .principal) {
+            FlowBreadcrumb(steps: steps, current: step, compact: true).frame(maxWidth: 520)
+          }
           ToolbarItem(placement: .cancellationAction) {
             if step < 2 { Button("Cancel") { cancel() }.disabled(busy) }
           }
@@ -901,19 +901,23 @@
       }
     }
     private var approvalFooter: some View {
-      HStack(spacing: 16) {
+      HStack(spacing: 10) {
+        NetworkStatusBar(isInline: true).fixedSize(horizontal: true, vertical: false)
+        if step < 2, let countdown = model.state?.proposal?.statusCountdown {
+          StatusCountdownView(countdown: countdown).fixedSize()
+        }
+        Spacer(minLength: 8)
         if step > 0 && step < 2 {
-          Button("Back") {
+          Button("Back", systemImage: "chevron.left") {
             step -= 1
             error = nil
-          }.buttonStyle(.bordered).disabled(busy)
+          }.labelStyle(.iconOnly).buttonStyle(.bordered).disabled(busy)
         }
         if step == 2 {
           Button("Done") { dismiss() }.buttonStyle(.bordered)
           if let fileURL {
             ShareLink(item: fileURL) {
-              Label("Share Approval", systemImage: "square.and.arrow.up").frame(
-                maxWidth: .infinity)
+              Label("Share Approval", systemImage: "square.and.arrow.up")
             }
             .buttonStyle(.borderedProminent)
           }
@@ -921,7 +925,7 @@
           Button {
             step += 1
           } label: {
-            Text("Continue").frame(maxWidth: .infinity)
+            Text("Continue")
           }
           .buttonStyle(.borderedProminent).disabled(
             interrupted)
@@ -932,22 +936,23 @@
             detail: interrupted
               ? "Close this approval and review it again."
               : securityKey.isConnected
-                ? "A different key is connected. Use the registered YubiKey." : securityKey.detail
-          ).frame(maxWidth: .infinity).transition(.opacity)
+                ? "A different key is connected. Use the registered YubiKey." : securityKey.detail,
+            compact: true
+          ).transition(.opacity)
         } else {
           Button(action: requestAuthorization) {
             HStack {
               if busy { ProgressView().tint(.white) }
               Label(busy ? "Authorizing…" : "Authorize", systemImage: "lock.shield")
-            }.frame(maxWidth: .infinity)
+            }
           }.buttonStyle(.borderedProminent).disabled(
             busy || interrupted || penDown || checkedInk == nil
               || !securityKey.isExpectedKeyConnected
           )
           .accessibilityIdentifier("authorizeApproval")
         }
-      }.controlSize(.large).frame(maxWidth: 676)
-        .padding(.horizontal, 24).padding(.vertical, 8).frame(maxWidth: .infinity)
+      }.controlSize(.large)
+        .padding(.horizontal, 16).padding(.vertical, 8).frame(maxWidth: .infinity)
     }
     private func invalidateConsent() {
       consentTask?.cancel()

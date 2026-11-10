@@ -77,6 +77,7 @@ extension View {
 /// One status control per screen. iPad uses a floating pill; Mac retains its footer strip.
 struct NetworkStatusBar: View {
   var countdown: StatusCountdown? = nil
+  var isInline = false
   #if os(iOS)
     @Environment(SecurityKeyMonitor.self) private var securityKey
   #endif
@@ -165,6 +166,11 @@ struct NetworkStatusBar: View {
         statusLabel
       }.buttonStyle(.plain).accessibilityIdentifier("networkStatus")
         .accessibilityHint("Show connection details")
+        .popover(
+          isPresented: $showingDetails, attachmentAnchor: .rect(.bounds), arrowEdge: .bottom
+        ) {
+          connectionDetails
+        }
       #if DEBUG && targetEnvironment(simulator)
         if network.isUITestControlled {
           Menu {
@@ -181,12 +187,12 @@ struct NetworkStatusBar: View {
           }.accessibilityLabel("Test connection").accessibilityIdentifier("testConnection")
         }
       #endif
-      Spacer(minLength: 12)
+      if !isInline { Spacer(minLength: 12) }
       if let countdown { StatusCountdownView(countdown: countdown) }
     }
-    .padding(.horizontal, 24)
-    .frame(minHeight: barHeight, alignment: .center)
-    .frame(maxWidth: .infinity)
+    .padding(.horizontal, isInline ? 0 : 24)
+    .frame(minHeight: isInline ? 44 : barHeight, alignment: .center)
+    .frame(maxWidth: isInline ? nil : .infinity)
     .background {
       #if os(macOS)
         Rectangle().fill(.bar)
@@ -197,27 +203,27 @@ struct NetworkStatusBar: View {
         Divider()
       #endif
     }
-    .popover(isPresented: $showingDetails) {
-      VStack(alignment: .leading, spacing: 16) {
-        Label(title, systemImage: symbol).font(.headline).foregroundStyle(color)
-        #if os(iOS)
-          Text(
-            "This iPad is a dedicated offline signer. Disconnect Wi-Fi and Ethernet to use Vow. It will unlock automatically when no network path is available."
-          )
-        #else
-          Text(
-            "This Mac coordinates enrollment and project setup. The iPad signer must stay disconnected during use. The Mac coordinator is not locked by this indicator."
-          )
-        #endif
-        DisclosureGroup("How connection detection works") {
-          Text(
-            "Vow checks the system network path without sending a probe. Any available path locks the iPad app, including local networks and VPNs that may not reach the internet. Checking and on-demand paths stay locked too. This does not disable system radios or other apps. Simulator connectivity may reflect your Mac."
-          )
-          .font(.caption).foregroundStyle(.secondary).padding(.top, 8)
-        }
-      }.font(.callout).padding(24).frame(idealWidth: 360)
-        .presentationCompactAdaptation(.popover)
-    }
+  }
+  private var connectionDetails: some View {
+    VStack(alignment: .leading, spacing: 16) {
+      Label(title, systemImage: symbol).font(.headline).foregroundStyle(color)
+      #if os(iOS)
+        Text(
+          "This iPad is a dedicated offline signer. Disconnect Wi-Fi and Ethernet to use Vow. It will unlock automatically when no network path is available."
+        )
+      #else
+        Text(
+          "This Mac coordinates enrollment and project setup. The iPad signer must stay disconnected during use. The Mac coordinator is not locked by this indicator."
+        )
+      #endif
+      DisclosureGroup("How connection detection works") {
+        Text(
+          "Vow checks the system network path without sending a probe. Any available path locks the iPad app, including local networks and VPNs that may not reach the internet. Checking and on-demand paths stay locked too. This does not disable system radios or other apps. Simulator connectivity may reflect your Mac."
+        )
+        .font(.caption).foregroundStyle(.secondary).padding(.top, 8)
+      }
+    }.font(.callout).padding(24).frame(idealWidth: 360)
+      .presentationCompactAdaptation(.popover)
   }
 }
 
