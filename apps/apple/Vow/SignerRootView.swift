@@ -41,6 +41,10 @@
     @State private var exporting = false
     let keys: DeviceKey
     @State private var explanationTarget: ExplanationTarget?
+    private var showsConnectionStatus: Bool {
+      approvalTarget == nil && explanationTarget == nil && showingReceipt == nil
+        && model.inspection == nil
+    }
 
     var body: some View {
       NavigationSplitView {
@@ -65,11 +69,14 @@
           }
         }.listStyle(.sidebar)
           .navigationSplitViewColumnWidth(min: 240, ideal: 275, max: 320)
-          .safeAreaInset(edge: .bottom) {
-            VStack(alignment: .leading, spacing: 8) {
+          .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(alignment: .leading, spacing: 0) {
               Text("Local prototype · No real funds").font(.caption2).foregroundStyle(
-                .secondary)
-            }.frame(maxWidth: .infinity, alignment: .leading).padding(24)
+                .secondary
+              )
+              .frame(maxWidth: .infinity, alignment: .leading).padding(24)
+              if showsConnectionStatus { Color.clear.frame(height: 56) }
+            }
           }
       } detail: {
         NavigationStack {
@@ -87,6 +94,9 @@
                 "Couldn't open Vow", systemImage: "exclamationmark.triangle",
                 description: Text(model.error ?? "Restart the application."))
             }
+          }
+          .safeAreaInset(edge: .bottom, spacing: 0) {
+            if showsConnectionStatus { Color.clear.frame(height: 56) }
           }
           .navigationTitle(
             (selection ?? .requests) == .requests
@@ -136,12 +146,13 @@
         #endif
       }
       .tint(.blue)
-      .networkStatusChrome(
-        isVisible: approvalTarget == nil && explanationTarget == nil && showingReceipt == nil
-          && model.inspection == nil,
-        countdown: selection == .requests ? model.state?.proposal?.statusCountdown : nil
-      )
-      .background(Color(uiColor: .systemGroupedBackground))
+      .overlay(alignment: .bottom) {
+        if showsConnectionStatus {
+          NetworkStatusBar(
+            countdown: selection == .requests ? model.state?.proposal?.statusCountdown : nil
+          ).fixedSize(horizontal: false, vertical: true)
+        }
+      }
       .fileImporter(
         isPresented: $importing, allowedContentTypes: [.vowTransaction, .json, .data, .plainText]
       ) {
