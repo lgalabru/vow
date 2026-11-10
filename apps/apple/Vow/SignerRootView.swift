@@ -416,7 +416,7 @@
             }.frame(maxWidth: 740).padding(32).frame(maxWidth: .infinity)
           }
           .background(Color(uiColor: .systemGroupedBackground))
-          .safeAreaInset(edge: .bottom) {
+          .safeAreaInset(edge: .bottom, spacing: 0) {
             HStack(spacing: 16) {
               Button("Decline", role: .destructive) { model.perform("decline") }.buttonStyle(
                 .bordered
@@ -430,8 +430,9 @@
                 Label("Review & Approve", systemImage: "signature").frame(maxWidth: .infinity)
               }.buttonStyle(.borderedProminent).controlSize(.large).disabled(
                 proposal.missingRequiredEvidence)
-            }.frame(maxWidth: 740).padding(.horizontal, 32).padding(.vertical, 18)
-              .frame(maxWidth: .infinity).background(.bar)
+            }.frame(maxWidth: 740).padding(.horizontal, 24).padding(.vertical, 8)
+              .frame(maxWidth: .infinity)
+              .background(Color(uiColor: .systemGroupedBackground), ignoresSafeAreaEdges: .bottom)
           }
         } else {
           ContentUnavailableView {
@@ -618,8 +619,7 @@
     var body: some View {
       NavigationStack {
         VStack(spacing: 0) {
-          FlowBreadcrumb(steps: steps, current: step).padding(.horizontal, 32)
-          Divider()
+          FlowBreadcrumb(steps: steps, current: step, compact: true).padding(.horizontal, 24)
           if step == 1 {
             authorizationLayout
           } else {
@@ -946,8 +946,8 @@
           )
           .accessibilityIdentifier("authorizeApproval")
         }
-      }.controlSize(.large).frame(maxWidth: 676).padding(24).frame(maxWidth: .infinity)
-        .background(.bar)
+      }.controlSize(.large).frame(maxWidth: 676)
+        .padding(.horizontal, 24).padding(.vertical, 8).frame(maxWidth: .infinity)
     }
     private func invalidateConsent() {
       consentTask?.cancel()
