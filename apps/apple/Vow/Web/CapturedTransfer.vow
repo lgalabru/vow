@@ -1,0 +1,233 @@
+{
+  "format": "vow.prototype.transaction.v1",
+  "purpose": "rehearsal_only",
+  "proposal": {
+    "format": "vow.prototype.proposal.v4",
+    "id": "draft-e97526b70c8ed1869a6eb282feac3035",
+    "organization": "Solana Foundation",
+    "organization_id": "organization-foundation",
+    "project_id": "project-grants",
+    "chain": "devnet",
+    "genesis_hash": "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG",
+    "quorum_id": "quorum-treasury",
+    "quorum_digest": "ca2f38238e631cffa316e72c10b5f814725544e7665dad54092961c38851fdce",
+    "title": "SOL transfer",
+    "amount": 250000000,
+    "asset": "SOL",
+    "recipient_name": "Unverified destination",
+    "recipient": "US517G5965aydkZ46HS38QLi7UQiSojurfbQfKCELFx",
+    "network": "Local demonstration",
+    "note": "Captured transaction for offline rehearsal. No transaction has been submitted.",
+    "transaction_intent": {
+      "transaction_hex": "010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000103090909090909090909090909090909090909090909090909090909090909090907070707070707070707070707070707070707070707070707070707070707070000000000000000000000000000000000000000000000000000000000000000040404040404040404040404040404040404040404040404040404040404040401020200010c0200000080b2e60e00000000",
+      "source_origin": "vow-demo://playground",
+      "chain": "solana:devnet",
+      "require_security_key": false,
+      "require_app_attest": false,
+      "reproduction": {
+        "format": "vow.prototype.reproduction.v1",
+        "engine": "surfpool-sdk 1.7.0",
+        "runtime_fingerprint": "litesvm-0.18.1-agave-4.3.2",
+        "target_chain": "solana:devnet",
+        "source": "synthetic_fixture",
+        "context_slot": 31,
+        "signature_checks": false,
+        "blockhash_checks": false,
+        "snapshot": {
+          "cGfHiC6Kgg3FpFZvgwGcswsCRtp4aBP2fzuXRQPizuN": {
+            "lamports": 10000000000,
+            "owner": "11111111111111111111111111111111",
+            "executable": false,
+            "rent_epoch": 18446744073709551615,
+            "data": ""
+          }
+        },
+        "absent_accounts": [
+          "US517G5965aydkZ46HS38QLi7UQiSojurfbQfKCELFx"
+        ],
+        "expected": {
+          "engine": "LiteSVM 0.18.1 · offline / signature and blockhash checks disabled",
+          "compute_units": 150,
+          "logs": [
+            "Program 11111111111111111111111111111111 invoke [1]",
+            "Program 11111111111111111111111111111111 success"
+          ],
+          "balances": {
+            "US517G5965aydkZ46HS38QLi7UQiSojurfbQfKCELFx": 250000000,
+            "cGfHiC6Kgg3FpFZvgwGcswsCRtp4aBP2fzuXRQPizuN": 9749995000
+          }
+        },
+        "profile": {
+          "context": {
+            "apiVersion": "4.3.2",
+            "slot": 31
+          },
+          "value": {
+            "instructionProfiles": [
+              {
+                "accountStates": {
+                  "11111111111111111111111111111111": {
+                    "type": "readonly"
+                  },
+                  "US517G5965aydkZ46HS38QLi7UQiSojurfbQfKCELFx": {
+                    "accountChange": {
+                      "data": {
+                        "data": [
+                          "",
+                          "base64"
+                        ],
+                        "executable": false,
+                        "lamports": 250000000,
+                        "owner": "11111111111111111111111111111111",
+                        "rentEpoch": 18446744073709551615,
+                        "space": 0
+                      },
+                      "type": "create"
+                    },
+                    "type": "writable"
+                  },
+                  "cGfHiC6Kgg3FpFZvgwGcswsCRtp4aBP2fzuXRQPizuN": {
+                    "accountChange": {
+                      "data": [
+                        {
+                          "data": [
+                            "",
+                            "base64"
+                          ],
+                          "executable": false,
+                          "lamports": 10000000000,
+                          "owner": "11111111111111111111111111111111",
+                          "rentEpoch": 18446744073709551615,
+                          "space": 0
+                        },
+                        {
+                          "data": [
+                            "",
+                            "base64"
+                          ],
+                          "executable": false,
+                          "lamports": 9749995000,
+                          "owner": "11111111111111111111111111111111",
+                          "rentEpoch": 18446744073709551615,
+                          "space": 0
+                        }
+                      ],
+                      "type": "update"
+                    },
+                    "type": "writable"
+                  }
+                },
+                "computeUnitsConsumed": 150,
+                "errorMessage": null,
+                "logMessages": [
+                  "Program 11111111111111111111111111111111 invoke [1]",
+                  "Program 11111111111111111111111111111111 success"
+                ]
+              }
+            ],
+            "key": "1111111111111111111111111111111111111111111111111111111111111111",
+            "readonlyAccountStates": {
+              "11111111111111111111111111111111": {
+                "data": [
+                  "c29sYW5hX3N5c3RlbV9wcm9ncmFt",
+                  "base64"
+                ],
+                "executable": true,
+                "lamports": 1,
+                "owner": "NativeLoader1111111111111111111111111111111",
+                "rentEpoch": 0,
+                "space": 21
+              }
+            },
+            "slot": 31,
+            "transactionProfile": {
+              "accountStates": {
+                "11111111111111111111111111111111": {
+                  "type": "readonly"
+                },
+                "US517G5965aydkZ46HS38QLi7UQiSojurfbQfKCELFx": {
+                  "accountChange": {
+                    "data": {
+                      "data": [
+                        "",
+                        "base64"
+                      ],
+                      "executable": false,
+                      "lamports": 250000000,
+                      "owner": "11111111111111111111111111111111",
+                      "rentEpoch": 18446744073709551615,
+                      "space": 0
+                    },
+                    "type": "create"
+                  },
+                  "type": "writable"
+                },
+                "cGfHiC6Kgg3FpFZvgwGcswsCRtp4aBP2fzuXRQPizuN": {
+                  "accountChange": {
+                    "data": [
+                      {
+                        "data": [
+                          "",
+                          "base64"
+                        ],
+                        "executable": false,
+                        "lamports": 10000000000,
+                        "owner": "11111111111111111111111111111111",
+                        "rentEpoch": 18446744073709551615,
+                        "space": 0
+                      },
+                      {
+                        "data": [
+                          "",
+                          "base64"
+                        ],
+                        "executable": false,
+                        "lamports": 9749995000,
+                        "owner": "11111111111111111111111111111111",
+                        "rentEpoch": 18446744073709551615,
+                        "space": 0
+                      }
+                    ],
+                    "type": "update"
+                  },
+                  "type": "writable"
+                }
+              },
+              "computeUnitsConsumed": 150,
+              "errorMessage": null,
+              "logMessages": [
+                "Program 11111111111111111111111111111111 invoke [1]",
+                "Program 11111111111111111111111111111111 success"
+              ]
+            }
+          }
+        },
+        "wire_digest": "ba809e1e0ab0eb58b447fd3ac2ff78ba180a9f6d0cd0c583307022bba3849d9b"
+      }
+    }
+  },
+  "action_digest": "dfec392d91fe5236736a2b68b728e69792d10156c4bb97c3cc7c8b3d716e9654",
+  "execution_plan": [
+    {
+      "id": "member_signatures",
+      "title": "Verify member signatures",
+      "stage": "Outer transaction",
+      "state": "planned",
+      "detail": "P-256 verification instructions are assembled after offline approvals arrive. Precompiles cannot run as Squads vault CPI instructions."
+    },
+    {
+      "id": "attestation_guard",
+      "title": "Enforce quorum and attestation policy",
+      "stage": "Execution guard",
+      "state": "not_installed",
+      "detail": "Bind organization, project, action digest, member keys, policy epoch and one-use nonce. The guard must be an unavoidable execution authority."
+    },
+    {
+      "id": "squads_execute",
+      "title": "Execute the approved Squads proposal",
+      "stage": "Squads CPI",
+      "state": "not_submitted",
+      "detail": "Target program SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf. No multisig/vault binding or guard deployment has been configured in this preview."
+    }
+  ]
+}

@@ -1,0 +1,334 @@
+# Proposed package contracts
+
+Status: design sketch, 2026-11-09. Names below are logical fields, not a finalized
+serialization or SDK. Produce golden vectors before implementing interoperable apps.
+
+## Encoding and digests
+
+Select a canonical binary encoding with explicit versioning and domain separation.
+Reject duplicate keys, ambiguous numbers, unsupported critical fields, oversized
+collections, trailing bytes and noncanonical encodings. Use integer base units for
+amounts. Hash exact chain bytes, not a lossy JSON rendering or displayed labels.
+Do not trust a package's declared digest without recomputing it.
+
+Define an acyclic evidence structure. The unsigned approval core is hashed first;
+device, YubiKey and provenance evidence refer to that core. The outer container
+includes signatures without incorporating itself into its own signing digest.
+Specifying an algorithm identifier does not permit arbitrary algorithm negotiation.
+
+## Rust and Swift boundary
+
+The production boundary is a generated, versioned C ABI, not the compatibility
+spike's JSON subprocess interface. Keep its exports small and wrap them in Swift.
+These are proposed contracts, not existing functions:
+
+- Rust creates a bounded session from package bytes and a pinned project quorum policy.
+  Swift receives a review model and opaque session ID, not permission to redefine
+  the signed action or independently construct its semantics.
+- After review, Rust prepares a signing request bound to that session: key ID,
+  algorithm, exact message bytes, and authorization-policy identifier. Distinguish
+  message-signing from digest-signing explicitly to avoid double hashing.
+- Swift's asynchronous platform adapter returns public-key identity and signature
+  bytes, or a typed cancellation/authorization failure. It never returns private
+  keys or serializable enclave key handles to Rust.
+- Rust verifies the signature, normalizes public signature encoding, and checks
+  session/policy freshness before finalizing the evidence package. Reject responses
+  for another session, key, algorithm or action. Platform-reported factor labels
+  remain statements with the assurance limits in the threat model.
+- Each Rust-owned output buffer has one matching Rust free operation. Input memory
+  is borrowed only for the call. No Rust references, `Vec`, Swift objects or native
+  exception objects cross the C boundary. Generated headers define fixed-width
+  types and explicit byte lengths.
+- Validate lengths, pointer/length combinations and handles at the boundary.
+  Return stable error codes plus non-sensitive diagnostic text. Prevent Rust panics
+  and Swift errors from unwinding across FFI; define invalidated-session behavior.
+- Prefer a request/response state machine over callbacks into Swift while Rust
+  holds a lock. Specify cancellation, duplicate completion and thread confinement.
+  Run heavy work off the UI thread and invoke OS UI from the appropriate actor.
+- Version the ABI independently from package schemas. Add cross-language vectors,
+  lifecycle tests and sanitizer checks for every exported operation.
+
+Core modules also support a headless Rust verifier. Platform adapters cannot
+silently enable network retrieval or change policy when an input is unsupported.
+
+### Implemented prototype ABI
+
+`apps/apple/RustCore/vow.h` is the checked-in version-one header. Both native
+targets link `vow-ffi` as a Rust static library through the `VowCore` Clang module.
+Automated header generation and a packaged XCFramework remain future work.
+
+| Export | Ownership and behavior |
+|---|---|
+| `vow_session_create_v1` | Returns an independent opaque numeric session. |
+| `vow_session_destroy_v1` | Drops its in-memory state and pending approval. |
+| `vow_dispatch_v1` | Borrows a valid input pointer and length for the call; returns owned UTF-8 JSON with `ok`, `data` or `error`. |
+| `vow_profile_transaction_v1` | Bounded 16 KB native request; Mac-only SDK execution, owned JSON envelope, no session/key access. |
+| `vow_string_free_v1` | Frees a dispatch result exactly once; null is permitted. |
+
+Swift decodes renderable snapshots and owns presentation state. Rust stores the
+ceremony, prototype proposal, enrolled public key, pending signing bytes and
+receipt history. `prepare` binds the request and consent digest; `complete` checks
+the session, request and returned signature against the registered key. Cancel or
+state changes invalidate pending approval. App restart discards this prototype state.
+
+Prototype file formats start with `vow.prototype.`. Current versions are
+`vow.prototype.ceremony.v4`, `vow.prototype.proposal.v4` and
+`vow.prototype.approval.v4`. Earlier versions are rejected without migration.
+These formats have no on-chain execution path.
+
+- Organization: `organization_id`, display name and `members`. Enrollment is
+  represented by each member’s `ready` flag only in this rehearsal.
+- Quorum: `id`, `name`, sorted distinct `member_ids` and `threshold`. IDs must
+  reference enrolled members of this organization; threshold is between one and
+  the selected-member count. Quorums are immutable and scoped to an organization.
+- Project: `id`, `name`, `quorum_id`, `chain` (`devnet` or `mainnet`), referencing an existing organization quorum.
+- Proposal: binds `organization_id`, `project_id`, `quorum_id` and `quorum_digest`.
+  Imports must match the active project’s exact policy.
+- Prepared approval: signs those identities and policy digest, the full quorum,
+  request digest and consent digest. Receipts preserve the project and quorum.
+
+The quorum digest covers a domain tag, organization ID and complete quorum.
+The enrollment fingerprint covers a separate domain, organization ID and roster,
+excluding projects and quorums. New project creation cannot reset enrollment.
+
+Workspace commands are `create_organization`, `select_organization`,
+`create_project` and `select_project`. Selection uses `id`. Organization creation
+uses `name` and starts with no members, quorums or projects. A new project requires
+`name`, explicit `chain` (`devnet` or `mainnet`), and exactly one of:
+
+```json
+{"quorum_id":"an-existing-organization-quorum-id"}
+```
+
+```json
+{"quorum":{"name":"Treasury signers","member_ids":[1,2,3],"threshold":2}}
+```
+
+The second form creates a named quorum and project atomically. Invalid creation
+leaves state unchanged. Neither form changes enrollment or existing quorums.
+Snapshots return available organizations/projects, all organization quorums,
+active `quorum` and `quorum_digest`, and project-filtered receipts. Context changes
+cancel pending authorization, including switching away and back.
+
+`explanation_input` accepts the current request `digest`, returning `summary`,
+`instructions` and a bounded `prompt`. Only validated transfer facts enter the
+prompt. Free-form request titles, notes and recipient names are excluded; model
+output never enters `prepare` or `complete`.
+
+## Organization enrollment manifest
+
+- Protocol version, organization ID and enrollment epoch.
+- Stable member identities, device public keys and key types.
+- Identity-evidence references, enrollment nonces and witness signatures.
+- Enrollment, device replacement and revocation authorities and recovery rules.
+
+The first trust anchor comes from in-person digest comparison, not a key supplied
+alongside an otherwise untrusted manifest. Production imports must authenticate
+these credentials and cannot treat the prototype’s `ready` flag as evidence.
+
+## Project quorum manifest
+
+- Organization, project and reusable quorum identities.
+- Quorum policy digest, distinct enrolled-member references and approval threshold.
+- Chain, network, multisig and vault identities and program versions.
+- Factor requirements, format-pack trust roots and allowed programs and limits.
+- Policy epoch, previous manifest digest, recovery and upgrade rules.
+- Authorized configuration signatures and referenced enrollment credentials.
+
+A quorum may be referenced by multiple projects, but vault/action/replay domains
+remain project-specific. Changing policy requires an explicit authorized transition.
+
+## Proposal package
+
+- Protocol version, organization, project, quorum and policy references, intended member or audience.
+- Unique request ID, chain identity, multisig and vault, proposal address/index.
+- Exact bytes to sign, or adapter action bytes and an explicit signing-mode tag.
+- Inner executable action bytes and their digest, including every instruction.
+- Required format-pack identifiers and digests.
+- Context entries with account address, data digest, source, checkpoint and proof
+  or stated trust basis. Labels and human descriptions are explicitly untrusted.
+- Validity/replay mode: durable nonce binding, persistent proposal sequencing,
+  or a fully specified execution-side expiry rule. Do not interchange these modes.
+- Optional authenticated proposer identity, which does not make the action safe.
+
+Show proposal meaning before authorization. Require canonical correspondence
+between the inner action reviewed and the actual outer approval/execution path.
+
+## Approval core and evidence
+
+- Domain and version, request ID, organization, project, quorum, chain, multisig, policy epoch and digest.
+- Proposal identity, exact chain message or action digest, and reviewed-context digest.
+- Member/key identity and required format-pack digest set.
+- Factor-policy identifier and decision: approve or reject.
+- Replay nonce/sequence and validity rules appropriate to the signing route.
+- Optional consent artifact digest and explicit evidence requirements.
+
+Attach typed device approval, optional chain-compatible Ed25519 signature,
+YubiKey evidence, ceremony certificate reference and optional App Attest evidence.
+Define precise signed preimages for each. A bare boolean such as `face_id=true`
+or `handwriting_match=true` is an application statement, not independent evidence.
+
+Raw handwriting and passport data are excluded by default. A hash alone does not
+prove the consent was freshly captured or matched. Keep private artifacts encrypted
+locally if policy requires retention. Export only deliberate disclosures.
+
+## Format pack
+
+Pack version and digest; chain and program IDs; supported program versions and
+instruction discriminators; bounded field layouts; account-role rules; permitted
+semantic-handler identifiers; display templates; issuer signatures; supersession
+and rollback policy. Include deterministic test vectors. Team policy determines
+which publisher keys and versions are accepted. No pack may override native safety
+checks, silently fetch dependencies, or introduce executable plugins.
+
+## Verification result
+
+Report separately: chain signature validity, member identity binding, policy and
+epoch validity, action interpretation, required factor evidence, app provenance,
+context freshness, quorum, and execution status. Distinguish unavailable evidence
+from verified evidence. Unknown mandatory evidence rejects the approval.
+
+Counters used by evidence verifiers need shared persistence and out-of-order
+delivery rules. The chain's proposal/nonce consumption remains authoritative for
+execution replay prevention; an App Attest counter is not a replacement for it.
+
+
+## Implemented transaction review contracts, 2026-11-09
+
+`vow.prototype.transaction.v1` is an 8 MB maximum JSON `.vow` file with
+`purpose: rehearsal_only`, a v4 proposal, independently recomputed action digest
+and an exact execution-plan description. `execution_ready` is false. Optional
+`transaction_intent` context contains exact transaction hex, native origin, wallet
+chain, required-factor flags, reproduction and IDLs. Required unsupported factors
+block approval in Rust and Swift. A plan entry is not an executable instruction.
+
+`vow.prototype.reproduction.v1` pins Surfpool SDK 1.7.0 and runtime fingerprint
+`litesvm-0.18.1-agave-4.3.2`. It includes wire hash, target chain, synthetic source,
+context slot, pre-state account fixtures, explicit absent addresses, disabled
+signature/blockhash-check flags, profile and expected result. Independent replay
+compares compute units, logs and result balances. Executable downloads are rejected.
+Caps: 1232 transaction bytes, 128 snapshot accounts, 32 output addresses, 8 MB
+encoded account data, 2 MB profile. There is no RPC fallback in `vow-replay`.
+
+`inspect_transaction_dump` accepts serialized full transactions, including unsigned
+signature placeholders. Native import converts binary to hex. Text may be hex,
+base64, RPC `[base64,"base64"]`, JSON `transaction_hex` / `transaction_base64`, or
+`transaction: [base64,"base64"]`. Instruction-only dumps and bare messages are
+unsupported. The inspector never signs. Unresolved lookup addresses and unknown
+instructions remain explicit. A network absent from raw bytes is not inferred.
+
+`vow.prototype.inspection.v1` wraps the same bytes with optional companion context;
+it is also exportable as `.vow`. It does not contain an enrolled policy or approval.
+Optional `blockhash_context` fields are `blockhash`, `chain`, `genesis_hash`,
+`observed_at_unix_ms`, `context_slot`, `observed_block_height`,
+`last_valid_block_height`, `estimated_expires_at_unix_ms`. The estimate is observation
+plus `min(remaining heights × 400 ms, 60 seconds)`; validate hash, chain, genesis and
+arithmetic. Observation is a coordinator claim, not authenticated chain evidence or
+the precise blockhash creation time. Missing context yields no timer. A matching
+hash can still expire earlier than the estimate; offline clock changes are another
+reason this cannot establish on-chain validity.
+
+Mac retrieval of a metadata IDL is opt-in. Artifacts bind canonical metadata PDA,
+owner, complete raw account bytes, program address, chain/genesis, source context
+slot and JSON content SHA-256. Inline UTF-8 JSON only, max 1 MB after decompression;
+none/gzip/zlib accepted. URL/external payloads are rejected. An IDL alone never
+installs an approval-capable decoder or authenticates account state.
+
+Rust hashes sorted canonical JSON so dependency feature unification cannot change
+signed object key order. ABI inputs are capped at 20 MB to accommodate escaped file
+contents, and outputs use `vow_string_free_v1` exactly once.
+
+Sample v4 proposals may include `demo_expires_at_unix_ms`, generated five minutes
+after sample creation and bound into the proposal digest. It drives the clearly
+labelled Demo status-bar timer and makes no chain-validity or authorization claim.
+Real transaction files do not populate this field; their timer uses the separately
+validated blockhash observation context. Missing expiry context is shown explicitly.
+
+`check_consent` receives the reviewed `digest` and exact `ink` hex. It validates the
+active request, quorum, required factors, local lifetime and ink bounds, returning
+`proposal_digest` and `consent_digest`. It does not create a key, signing session or
+approval, and does not mutate state. `prepare` repeats the same checks at explicit
+authorization. Handwriting identity matching is not implemented by this preflight.
+
+## Offline device enrollment, version 1
+
+`prepare_device_enrollment` accepts two distinct compressed P-256 public keys and
+`key_source`. Rust generates a 32-byte nonce and canonical JSON bytes with domain
+`vow.device-enrollment.v1`, purpose `offline_device_enrollment_only`, PIV slot `82`,
+PIN policy `always` and touch policy `always`. Swift signs these exact bytes with
+the YubiKey and then the protected device key. `verify_device_enrollment` requires
+both raw 64-byte ECDSA signatures and rejects noncanonical or unsupported payloads.
+
+The public `Vow-device-enrollment.json` record contains the message, both signatures
+and the SHA-256 fingerprint of the compressed device public key. It explicitly
+states `on_chain_registration: not_registered` and
+`hardware_attestation: not_verified`. Key source, PIV policy and origin are local
+adapter observations, not remotely attested facts. No private-key representation,
+PIN, management key or YubiKey serial is exported.
+
+For local prototype approvals, `register_key.local_security_key` pins the enrolled
+YubiKey public key for the Rust session. It cannot subsequently be changed or
+removed. Canonical approval bytes include that public key. Completion requires its
+signature over the same exact bytes and exports `local_security_key_proof` beside
+the device signature. Missing, substituted and wrong-message proofs fail. This
+local proof does not implement the separate production attestation guard or satisfy
+imported requests requiring unsupported chain-verifiable evidence.
+
+## Offline FIDO enrollment, version 2
+
+`prepare_device_enrollment` accepts `security_key_kind: fido2` and the opaque
+hexadecimal `credential_id` in addition to the two public keys and source. It
+returns canonical `vow.device-enrollment.v2` bytes with RP ID `vow.invalid`, policy
+`user_verification_required` and `user_presence_required`, and an empty legacy slot
+field. The nonce remains random. Version 1 PIV canonical bytes remain unchanged.
+
+The device signs the canonical message directly. The security key signs raw CTAP
+assertion bytes: authenticator data concatenated with SHA-256 of the message.
+`verify_device_enrollment.security_key_authenticator_data` is required for v2.
+Rust accepts exactly 37 bytes with the pinned RP hash and flags `0x05`: UP and UV,
+no backup eligibility/state, no attested data or extensions. It verifies the
+security-key P-256 signature and then the device signature. The public export
+retains authenticator data alongside both proofs. Factory hardware origin and
+on-chain registration remain explicitly unverified.
+
+`register_key` accepts `local_security_key_kind: fido2` and
+`local_credential_id`; a public key is mandatory for this method. Canonical
+approval bytes bind all three fields. Completion requires the FIDO authenticator
+data and signature over the exact prepared message hash. A session cannot remove
+or downgrade the pinned factor or change its credential identifier. Missing UV,
+wrong RP, wrong message, unsupported flags and raw-signature substitution fail.
+
+The discoverable credential uses a fixed opaque user handle, SHA-256 of
+`vow.offline.security-key.v1`. Lookup is independent of a device/vendor ID. This
+means one Vow credential per physical key, not a person or account identity. It
+does not reconstruct the separate Secure Enclave key. The prototype's reserved
+RP namespace is not a browser WebAuthn origin or an Apple associated-domain claim.
+
+
+## Native external-key WebAuthn enrollment, version 3
+
+`native_security_key_configuration` reports the compile-time RP and whether it is
+configured. No imported request can select an RP. `native_registration_challenge`
+accepts `device_public_key` and returns a random challenge and per-registration
+user handle. `parse_native_registration` accepts `challenge_hex`, `credential_id`,
+`client_data_json_hex` and `attestation_object_hex`. All are hexadecimal byte
+strings. It validates the registration origin, type, challenge, RP hash, UV/UP,
+credential identifier and ES256 COSE public key. It does not certify factory origin.
+
+`prepare_device_enrollment` accepts `security_key_kind: webauthn` and
+`credential_id`, emitting `vow.device-enrollment.v3` with the pinned `rp_id`.
+The device signs canonical bytes directly. The native assertion challenge is
+SHA-256 of those bytes. The external key signs authenticator data concatenated
+with SHA-256 of the exact returned client JSON. `verify_device_enrollment` requires
+`security_key_authenticator_data` and `security_key_client_data_json`, both hex,
+alongside both signatures. Client type must be `webauthn.get`, origin must be the
+pinned HTTPS RP, cross-origin must be false, and decoded challenge must match.
+Assertion authenticator data is exactly 37 bytes with flags `0x05`.
+
+`verify_native_assertion` checks this proof before the enclave operation.
+`register_key` pins kind `webauthn`, public key and credential ID. Prepared approval
+bytes bind `local_security_key_rp_id` as well. Completion requires both raw native
+proof fields and verifies them again. Public exports retain the client JSON and
+authenticator data. Legacy v1 PIV and v2 direct CTAP records remain accepted; no
+session may replace or downgrade its enrolled factor. A changed build RP cannot
+silently migrate a v3 enrollment.

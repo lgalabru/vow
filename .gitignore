@@ -1,0 +1,13 @@
+.DS_Store
+.build/
+target/
+.local/
+xcuserdata/
+*.xcuserstate
+__pycache__/
+*.pyc
+.vercel/
+.env
+.env.*
+.vercel
+.env*

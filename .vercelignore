@@ -1,0 +1,16 @@
+.git
+.local
+target
+spikes
+crates
+docs
+services
+apps/apple
+**/node_modules
+**/.next
+**/.build
+**/.vercel
+**/test-results
+**/playwright-report
+**/*.tsbuildinfo
+**/.env*

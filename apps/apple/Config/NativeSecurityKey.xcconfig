@@ -1,0 +1,3 @@
+// Verified HTTPS association. Keep this RP stable after enrollment.
+VOW_WEBAUTHN_RP_ID = axel.md
+VOW_IPAD_ENTITLEMENTS = Config/Vow-iPad-NativeSecurityKey.entitlements

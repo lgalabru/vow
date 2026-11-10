@@ -1,0 +1,19 @@
+[package]
+name = "vow-replay"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+hex.workspace = true
+sha2.workspace = true
+base64 = "0.22.1"
+litesvm = "=0.18.1"
+solana-account = "4.5"
+solana-address = "2.2"
+solana-transaction-replay = { package = "solana-transaction", version = "4.2", features = ["wincode"] }
+wincode = "0.6.1"
+# Solana 2.x and 4.x share a broad five8 range; enable std for its shared error type.
+five8_core = { version = "0.1.2", features = ["std"] }
