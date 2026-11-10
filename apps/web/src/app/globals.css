@@ -137,13 +137,13 @@ h1 {
 h1 span {
   color: #75757a;
 }
-.hero-description {
+.vow-lead {
   margin-top: 26px;
   color: #67676c;
   font-size: 19px;
   line-height: 1.6;
 }
-.hero-actions {
+.vow-actions {
   display: flex;
   justify-content: center;
   align-items: center;
@@ -879,11 +879,11 @@ h2 {
   h1 {
     font-size: clamp(43px, 8.5vw, 64px);
   }
-  .hero-description {
+  .vow-lead {
     font-size: 17px;
     margin-top: 22px;
   }
-  .hero-actions {
+  .vow-actions {
     gap: 20px;
   }
   .preview {
@@ -973,4 +973,17 @@ h2 {
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* Keep navigation and preview controls comfortable on touch screens. */
+.nav-links a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+}
+.preview-tabs button {
+  min-height: 44px;
+}
+.faq-list summary {
+  min-height: 36px;
 }

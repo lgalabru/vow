@@ -79,11 +79,11 @@ export function Site() {
             <br />
             <span>Personal approval.</span>
           </h1>
-          <p className="hero-description">
+          <p className="vow-lead">
             A dedicated place for your team’s approvals.
             <br className="desktop-break" /> Built for iPad. Designed to stay offline.
           </p>
-          <div className="hero-actions">
+          <div className="vow-actions">
             <Button asChild radius="round" className="pill-button">
               <a href="#experience">
                 Explore the app <ArrowDown size={17} />
