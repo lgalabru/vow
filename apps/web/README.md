@@ -29,8 +29,9 @@ checks at desktop and mobile sizes. The Vercel GitHub integration deploys `main`
 to production and creates branch previews. No Vercel access token belongs in this
 repository or its workflows.
 
-Custom hostname: `vow.scarce.sh`. The external DNS provider is Gandi. Set the
-`vow` CNAME to `44166953089c7417.vercel-dns-017.com.` and verify with:
+Custom hostname: `vow.scarce.sh`. Cloudflare is the authoritative DNS provider. The CNAME and HTTPS certificate
+were verified on 2026-11-10. Keep the
+`vow` CNAME to `44166953089c7417.vercel-dns-017.com.` and recheck with:
 
 ```sh
 vercel domains verify vow.scarce.sh --scope ludogalabru-1362s-projects
