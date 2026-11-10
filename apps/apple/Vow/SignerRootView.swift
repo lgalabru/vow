@@ -141,6 +141,7 @@
           && model.inspection == nil,
         countdown: selection == .requests ? model.state?.proposal?.statusCountdown : nil
       )
+      .background(Color(uiColor: .systemGroupedBackground))
       .fileImporter(
         isPresented: $importing, allowedContentTypes: [.vowTransaction, .json, .data, .plainText]
       ) {
