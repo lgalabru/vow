@@ -288,6 +288,12 @@ final class VowUITests: XCTestCase {
       try completeOnboardingAndSign(usesFIDO: false)
     }
     func testNativeSecurityKeyEnrollmentAndSigningUseNoAppPINField() throws {
+      try completeNativeEnrollmentAndSign()
+    }
+    func testNativeKeyRemovalPreventsApprovalCompletion() throws {
+      try completeNativeEnrollmentAndSign(removingKeyDuringApproval: true)
+    }
+    private func completeNativeEnrollmentAndSign(removingKeyDuringApproval: Bool = false) throws {
       let app = XCUIApplication()
       app.launchArguments = [
         "--ui-test-network=offline", "--ui-test-security-key=connected",
@@ -306,6 +312,7 @@ final class VowUITests: XCTestCase {
       app.buttons["onboardingContinue"].tap()
       XCTAssertTrue(app.staticTexts["devicePublicKey"].waitForExistence(timeout: 5))
       app.terminate()
+      if removingKeyDuringApproval { app.launchArguments.append("--ui-test-signing-delay") }
       launch(app)
       XCTAssertTrue(app.staticTexts["devicePublicKey"].waitForExistence(timeout: 10))
       XCTAssertEqual(app.staticTexts["devicePublicKey"].label, publicKey)
@@ -323,6 +330,19 @@ final class VowUITests: XCTestCase {
       expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: authorize)
       waitForExpectations(timeout: 5)
       authorize.tap()
+      if removingKeyDuringApproval {
+        XCTAssertTrue(app.buttons["Authorizing…"].waitForExistence(timeout: 3))
+        app.buttons["testConnection"].tap()
+        app.buttons["Unplug YubiKey"].tap()
+        XCTAssertTrue(
+          app.staticTexts[
+            "The YubiKey connection changed. Close this approval and review it again."
+          ].waitForExistence(timeout: 3))
+        XCTAssertFalse(app.staticTexts["Approval created"].waitForExistence(timeout: 6))
+        XCTAssertFalse(app.buttons["Share Approval"].exists)
+        capture(app, "iPad — Native key removal blocks completion")
+        return
+      }
       XCTAssertTrue(app.staticTexts["Approval created"].waitForExistence(timeout: 10))
       XCTAssertFalse(app.alerts.secureTextFields.firstMatch.exists)
       capture(app, "iPad — Native security-key approval")

@@ -256,7 +256,9 @@ struct NetworkStatusBar: View {
         if phase == .active { securityKey.start() }
       }
       .onAppear {
-        securityKey.configure(expected: keys.registeredSecurityKey)
+        securityKey.configure(
+          expected: keys.registeredSecurityKey,
+          preferNative: NativeSecurityKey.configuration(model: model).enabled)
         if network.isOffline { model.importPendingFile() }
       }
       .onChange(of: network.interruptionEpoch) { _, _ in model.perform("cancel") }

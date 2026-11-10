@@ -62,6 +62,9 @@ FIDO2 and compatible PIV credentials sign local approvals; production attestatio
 - [x] Owner selected `vow.scarce.sh`; association file deployed and verified over HTTPS.
 - [x] Enable associated-domain provisioning and deliver the activated build wirelessly.
   Signed entitlement and Info.plist match `vow.scarce.sh`; Apple CDN serves the association.
+- [ ] Resolve the physical iPad's `ASAuthorizationError/1004` webcredentials
+  association failure. Refresh association during an online install, then verify
+  a native assertion while offline. Public origin, Apple CDN and entitlements match.
 - [ ] Physical native-key acceptance: usual PIN, USB touch, offline registration and
   assertions, cancellation/removal, interrupted setup and public-record restore.
   Simulator fixtures do not establish these guarantees.

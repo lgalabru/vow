@@ -395,7 +395,11 @@ persists the public credential before the second proof so interrupted setup can
 resume. Importing a verified public enrollment record recovers the key binding, not
 a missing Secure Enclave private key. Apple does not expose credential enumeration
 or an authoritative key serial through this API. USB presence is only a UI hint;
-the pinned credential proof decides authorization.
+the pinned credential proof decides authorization. In native mode, Vow observes
+`TKSmartCardSlotManager.slotNames` for insertion/removal and rechecks slot presence
+around signing without opening a CCID connection or selecting an applet. This
+leaves AuthenticationServices in control of the key. Removal still invalidates
+the authorization epoch. Legacy CTAP/PIV mode retains its SDK smart-card session.
 
 Without native configuration, retain direct FIDO2 over USB CCID when the connected
 key supports it. This is

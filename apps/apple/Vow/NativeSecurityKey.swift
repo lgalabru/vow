@@ -26,8 +26,10 @@
     static func configuration(model: VowModel) -> NativeKeyConfiguration {
       let value: NativeKeyConfiguration? = try? model.call("native_security_key_configuration")
       #if DEBUG && targetEnvironment(simulator)
-        if ProcessInfo.processInfo.arguments.contains("--ui-test-native-security-key"), let value {
-          return value
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("--ui-test-native-security-key"), let value { return value }
+        if arguments.contains(where: { $0.hasPrefix("--ui-test-") }) {
+          return NativeKeyConfiguration(enabled: false, rpId: nil)
         }
       #endif
       guard let value, value.enabled, let rp = value.rpId,
@@ -184,13 +186,34 @@
       if let error = error as? ASAuthorizationError, error.code == .canceled {
         continuation.resume(throwing: CancellationError())
       } else {
-        let code = (error as NSError).code
-        continuation.resume(
-          throwing: VowError(
-            message:
-              "iPadOS could not complete the security-key request. The app’s domain association or key availability could not be confirmed. No PIN reset was requested. Support code: AS\(code)."
-          ))
+        continuation.resume(throwing: Self.requestFailure(error))
       }
+    }
+
+    private static func requestFailure(_ error: Error) -> VowError {
+      let root = error as NSError
+      var current: NSError? = root
+      var codes: [String] = []
+      var reason: String?
+      for _ in 0..<4 {
+        guard let next = current else { break }
+        codes.append("\(next.domain)/\(next.code)")
+        if let detail = next.userInfo[NSLocalizedFailureReasonErrorKey] as? String {
+          reason = String(detail.prefix(300))
+        } else if let detail = next.userInfo[NSLocalizedDescriptionKey] as? String,
+          next !== root
+        {
+          reason = String(detail.prefix(300))
+        }
+        current = next.userInfo[NSUnderlyingErrorKey] as? NSError
+      }
+      let message =
+        root.domain == ASAuthorizationErrorDomain && root.code == 1005
+        ? "iPadOS could not show the security-key prompt. Keep Vow in the foreground and close other system dialogs."
+        : "iPadOS could not authorize the registered security key. Vow did not receive a signature."
+      return VowError(
+        message:
+          "\(message) Support: \(codes.joined(separator: " → ")).\(reason.map { " " + $0 } ?? "")")
     }
 
     static func enroll(

@@ -20,6 +20,10 @@
     private var disconnectTask: Task<Void, Never>?
     private var generation: UInt64 = 0
     private var performingPIVOperation = false
+    private var configured = false
+    private var usesNativePresence = false
+    private var nativeSlot: String?
+    private var slotObserver: NSKeyValueObservation?
     private(set) var expectedKey: RegisteredSecurityKey?
     var isExpectedKeyConnected: Bool {
       guard isConnected else { return false }
@@ -33,7 +37,15 @@
       if expectedKey?.usesNative == true { return true }  // Presence hint only; iPadOS verifies the credential ID.
       return expectedKey != nil && serial == expectedKey?.serial
     }
-    func configure(expected: RegisteredSecurityKey?) { expectedKey = expected }
+    func configure(expected: RegisteredSecurityKey?, preferNative: Bool = false) {
+      expectedKey = expected
+      let native = expected?.usesNative ?? preferNative
+      guard !configured || native != usesNativePresence else { return }
+      stop()
+      configured = true
+      usesNativePresence = native
+      start()
+    }
     var connectedSerial: UInt? { serial }
 
     #if DEBUG && targetEnvironment(simulator)
@@ -62,20 +74,46 @@
         detail = "USB smart-card access requires a physical iPad."
       #else
         Logs.configure(logLevel: .warning)
-        start()
       #endif
     }
     isolated deinit {
       monitorTask?.cancel()
       disconnectTask?.cancel()
+      slotObserver?.invalidate()
       if let connection { Task { await connection.close(error: nil) } }
     }
 
     func start() {
+      guard configured else { return }
       #if DEBUG && targetEnvironment(simulator)
-        if isTestControlled { simulateForUITest(simulatedConnected) }
+        if isTestControlled {
+          simulateForUITest(simulatedConnected)
+          return
+        }
       #endif
       #if !targetEnvironment(simulator)
+        if usesNativePresence {
+          guard slotObserver == nil else { return }
+          guard let manager = TKSmartCardSlotManager.default else {
+            status = .unavailable
+            detail = "USB security-key detection is unavailable on this iPad."
+            return
+          }
+          // Observe insertion/removal without opening a smart-card session.
+          // AuthenticationServices must have sole control of the native request.
+          let observationGeneration = generation
+          slotObserver = manager.observe(\.slotNames, options: [.initial, .new]) {
+            [weak self] manager, _ in
+            let names = manager.slotNames
+            Task { @MainActor [weak self] in
+              guard let self, self.generation == observationGeneration,
+                self.usesNativePresence, self.slotObserver != nil
+              else { return }
+              self.updateNativePresence(slotNames: names)
+            }
+          }
+          return
+        }
         guard monitorTask == nil else { return }
         monitorTask = Task { @MainActor [weak self] in
           while !Task.isCancelled {
@@ -92,6 +130,9 @@
       monitorTask = nil
       disconnectTask?.cancel()
       disconnectTask = nil
+      slotObserver?.invalidate()
+      slotObserver = nil
+      nativeSlot = nil
       let old = connection
       connection = nil
       session = nil
@@ -100,6 +141,20 @@
       status = .missing
       detail = "USB-C security key required for authorization."
       if let old { Task { await old.close(error: nil) } }
+    }
+
+    private func updateNativePresence(slotNames: [String]) {
+      let candidates = slotNames.filter { $0.localizedCaseInsensitiveContains("YubiKey") }
+      let next = nativeSlot.flatMap { candidates.contains($0) ? $0 : nil } ?? candidates.first
+      guard next != nativeSlot || (next != nil && !isConnected) else { return }
+      nativeSlot = next
+      serial = nil
+      interruptionEpoch &+= 1
+      status = next == nil ? .missing : .connected
+      detail =
+        next == nil
+        ? "USB-C security key required for authorization."
+        : "USB-C detected · iPadOS verifies the registered credential."
     }
 
     private func discover() async {
@@ -167,6 +222,24 @@
       #if DEBUG && targetEnvironment(simulator)
         if isTestControlled { return }
       #endif
+      if usesNativePresence {
+        let names: [String]
+        do {
+          names = try await USBSmartCardConnection.availableDevices().map(\.name)
+        } catch {
+          updateNativePresence(slotNames: [])
+          throw VowError(
+            message: "Reconnect the registered security key and review this approval again.")
+        }
+        guard let nativeSlot, names.contains(nativeSlot),
+          isConnected, interruptionEpoch == epoch
+        else {
+          updateNativePresence(slotNames: names)
+          throw VowError(
+            message: "The security-key connection changed. Review this approval again.")
+        }
+        return
+      }
       guard let connection, !performingPIVOperation else {
         throw VowError(message: "The YubiKey connection is unavailable or busy.")
       }
@@ -516,6 +589,10 @@
       func simulateForUITest(_ connected: Bool) {
         guard isTestControlled else { return }
         simulatedConnected = connected
+        if usesNativePresence {
+          updateNativePresence(slotNames: connected ? ["YubiKey UI fixture"] : [])
+          return
+        }
         serial = connected ? 424242 : nil
         if isConnected != connected { interruptionEpoch &+= 1 }
         status = connected ? .connected : .missing

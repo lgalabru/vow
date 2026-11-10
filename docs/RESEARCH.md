@@ -350,3 +350,37 @@ FIDO factors, parsing failures and transport/PIN errors never downgrade to PIV.
 Simulator regression tests inject the SDK's actual normalized error and a parsing
 failure through the same session-opening function. UI errors expose readable
 instructions and a bounded support code, not opaque SDK exception text.
+
+
+## Native security-key session ownership (2026-11-10)
+
+The owner reported `AS10004` from Authorize while USB detection showed connected.
+The old wrapper prefixed every NSError code with `AS` and attributed all failures
+to association/key availability, discarding the actual domain and underlying
+errors. The served association file, Apple CDN copy, signed entitlement and
+provisioning capability were checked and matched `vow.scarce.sh` and the app ID.
+That does not prove the iPad's cached association state or successful offline use.
+
+The previous detector held a `USBSmartCardConnection` and Management session while
+calling Apple's native security-key API. YubiKit opens `TKSmartCard.beginSession`
+and keeps it until explicit close or removal. Apple's API documents that a second
+smart-card session fails while another exists. This is a conflict risk, not a
+confirmed explanation of the owner's numeric code.
+
+Native mode now uses passive slot-name observation and fresh enumeration, without
+opening a smart-card session. The exact enrolled credential and Rust proof checks
+remain mandatory. Legacy direct CTAP/PIV mode keeps its existing transport. Error
+messages retain bounded NSError domains/codes and underlying system failure text;
+PINs, APDUs and challenges are not logged. Physical retry remains the acceptance
+test; simulator fixtures cannot establish the hardware root cause.
+
+- [Apple beginSession](https://developer.apple.com/documentation/cryptotokenkit/tksmartcard/beginsession(reply:))
+- Local pinned YubiKit: `YubiKit/Connection/SmartCard/USBSmartCardConnection.swift`.
+
+The diagnostic build then exposed the actual failure in the owner's screenshot:
+`com.apple.AuthenticationServices.AuthorizationError/1004`, with the explicit
+reason that the webcredentials association could not be verified for
+`4HY7TSGF6M.org.vow.prototype` and `vow.scarce.sh`. This identifies association
+verification as the observed blocker; it does not confirm the USB-session
+hypothesis. The iPad was offline and the candidate was installed over USB. An
+online association refresh followed by an offline assertion is the next test.
