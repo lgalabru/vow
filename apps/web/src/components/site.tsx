@@ -1,19 +1,32 @@
 'use client';
 
-import { Button } from '@solana/design-system/button';
+import { ArrowRight, ChevronDown, Github, KeyRound, Laptop, PenLine, Star } from 'lucide-react';
+import { MotionConfig, motion, useScroll, useTransform } from 'motion/react';
 import Image from 'next/image';
-import {
-  ArrowDown,
-  ArrowRight,
-  Check,
-  ChevronDown,
-  Fingerprint,
-  KeyRound,
-  Laptop,
-  PenLine,
-  WifiOff,
-} from 'lucide-react';
-import { AppPreview } from './app-preview';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Bento } from './bento';
+import { Device } from './device';
+
+const steps = [
+  {
+    icon: Laptop,
+    title: 'Set the team up on Mac.',
+    body: 'Enroll members in person. Organize projects. Choose the people and threshold for each quorum.',
+    device: 'The ceremony companion',
+  },
+  {
+    icon: PenLine,
+    title: 'Review on your iPad.',
+    body: 'Import the request, inspect the details, and record your consent on a screen that does nothing else.',
+    device: 'Your offline approval device',
+  },
+  {
+    icon: KeyRound,
+    title: 'Authorize. Then share.',
+    body: 'Use your registered security key and iPad authentication. Export the approval for your team to collect.',
+    device: 'A portable signed approval',
+  },
+];
 
 const questions = [
   {
@@ -44,237 +57,248 @@ const questions = [
   {
     question: 'Does the website connect to my wallet?',
     answer:
-      'No. This website is a product preview. It does not connect to a wallet, read a security key, collect signatures, or request access to your devices. The interactive example uses sample data only.',
+      'No. This website is a product preview. It does not connect to a wallet, read a security key, collect signatures, or request access to your devices. The illustrations use sample data only.',
   },
 ];
 
-/** The public product page, with no account collection or third-party analytics. */
-export function Site() {
+/** True below the width where the landscape iPad's text stops being readable. */
+function useNarrow() {
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 760px)');
+    const update = () => setNarrow(query.matches);
+    update();
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+  return narrow;
+}
+
+/** A block that rises into place the first time it scrolls into view. */
+export function Reveal({
+  children,
+  delay = 0,
+  className,
+}: {
+  children: ReactNode;
+  delay?: number;
+  className?: string;
+}) {
+  return (
+    <motion.div
+      className={className}
+      initial={{ opacity: 0, y: 28 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '0px 0px -12% 0px' }}
+      transition={{ duration: 0.7, delay, ease: [0.22, 1, 0.36, 1] }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+function Hero() {
+  const ref = useRef<HTMLElement>(null);
+  const narrow = useNarrow();
+  const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end start'] });
+  // The copy falls behind the scroll and fades; the iPad rises to meet it.
+  const copyY = useTransform(scrollYProgress, [0, 1], [0, 180]);
+  const copyOpacity = useTransform(scrollYProgress, [0, 0.55], [1, 0]);
+  const deviceY = useTransform(scrollYProgress, [0, 1], [0, -150]);
+  return (
+    <section ref={ref} className="hero" aria-labelledby="hero-heading">
+      <motion.div className="hero-copy shell" style={{ y: copyY, opacity: copyOpacity }}>
+        <p className="tag">For iPad and Mac</p>
+        <h1 id="hero-heading">
+          Shared control.
+          <br />
+          <span>Personal approval.</span>
+        </h1>
+        <p className="lead">
+          A dedicated iPad for your team&rsquo;s multisig approvals. Review the request, sign by
+          hand, authorize with your security key. Offline the whole time.
+        </p>
+        <div className="actions">
+          <a className="button" href="#workflow">
+            See how it works <ArrowRight size={18} />
+          </a>
+          <a className="link" href="#questions">
+            Read the questions
+          </a>
+        </div>
+      </motion.div>
+      <motion.div className="hero-device" style={{ y: deviceY }}>
+        <Device portrait={narrow} />
+        <p className="hero-note">Illustration with sample data. No signing keys are used.</p>
+      </motion.div>
+    </section>
+  );
+}
+
+export const REPOSITORY = 'https://github.com/lgalabru/vow';
+
+const defaultLinks = [
+  { href: '#features', label: 'Features' },
+  { href: '#workflow', label: 'How it works' },
+  { href: '#questions', label: 'Questions' },
+];
+
+/**
+ * The floating navigation. `stars` is the repository's star count, read on the
+ * server; it is left out when GitHub could not be reached.
+ */
+export function Header({
+  stars,
+  links = defaultLinks,
+}: {
+  stars?: number | null;
+  links?: { href: string; label: string }[];
+}) {
   return (
     <>
       <a className="skip-link" href="#main">
         Skip to content
       </a>
       <header className="site-header">
-        <nav className="shell navigation" aria-label="Main navigation">
+        <nav className="navigation" aria-label="Main navigation">
           <a className="brand" href="#" aria-label="Vow home">
-            <Image src="/vow-icon.png" alt="" width={34} height={34} />
+            <Image src="/vow-icon.png" alt="" width={28} height={28} />
             vow
           </a>
           <div className="nav-links">
-            <a href="#workflow">How it works</a>
-            <a href="#principles">Principles</a>
-            <a href="#questions">Questions</a>
+            {links.map((link) => (
+              <a key={link.href} href={link.href}>
+                {link.label}
+              </a>
+            ))}
           </div>
-          <a className="preview-badge" href="#availability">
-            In development <ArrowUpRightIcon />
+          <a className="nav-badge" href={REPOSITORY} target="_blank" rel="noreferrer">
+            <Github size={16} />
+            In development
+            {stars != null && (
+              <span className="nav-stars" aria-label={`${stars} GitHub stars`}>
+                <Star size={12} fill="currentColor" />
+                {new Intl.NumberFormat('en', { notation: 'compact' }).format(stars)}
+              </span>
+            )}
           </a>
         </nav>
       </header>
-      <main id="main">
-        <section className="hero shell" aria-labelledby="hero-heading">
-          <p className="eyebrow">VOW FOR IPAD & MAC</p>
-          <h1 id="hero-heading">
-            Shared control.
-            <br />
-            <span>Personal approval.</span>
-          </h1>
-          <p className="vow-lead">
-            A dedicated place for your team’s approvals.
-            <br className="desktop-break" /> Built for iPad. Designed to stay offline.
-          </p>
-          <div className="vow-actions">
-            <Button asChild radius="round" className="pill-button">
-              <a href="#experience">
-                Explore the app <ArrowDown size={17} />
-              </a>
-            </Button>
-            <a className="text-link" href="#workflow">
-              How it works <ArrowRight size={17} />
-            </a>
-          </div>
-          <AppPreview />
-        </section>
-
-        <section className="introduction shell" aria-labelledby="intro-heading">
-          <p className="eyebrow">A MOMENT TO BE CERTAIN</p>
-          <h2 id="intro-heading">
-            Give important decisions
-            <br />
-            their own space.
-          </h2>
-          <p>
-            A browser is a busy place. An approval deserves your full attention. Vow brings the
-            request, your consent, and your signing devices into one considered flow.
-          </p>
-        </section>
-
-        <section className="workflow-section" id="workflow" aria-labelledby="workflow-heading">
-          <div className="shell">
-            <div className="section-heading">
-              <p className="eyebrow">TWO APPS. ONE SHARED PROCESS.</p>
-              <h2 id="workflow-heading">
-                Prepared together.
-                <br />
-                Approved individually.
-              </h2>
-            </div>
-            <div className="workflow-grid">
-              <article className="workflow-step">
-                <span className="step-number">01</span>
-                <div className="workflow-icon">
-                  <Laptop />
-                </div>
-                <h3>Set the team up on Mac.</h3>
-                <p>
-                  Enroll members in person. Organize projects. Choose the people and threshold for
-                  each quorum.
-                </p>
-                <span className="step-device">THE CEREMONY COMPANION</span>
-              </article>
-              <article className="workflow-step">
-                <span className="step-number">02</span>
-                <div className="workflow-icon">
-                  <PenLine />
-                </div>
-                <h3>Review on your iPad.</h3>
-                <p>
-                  Import the request, inspect the details, and record your consent. A focused screen
-                  for a deliberate decision.
-                </p>
-                <span className="step-device">YOUR OFFLINE APPROVAL DEVICE</span>
-              </article>
-              <article className="workflow-step">
-                <span className="step-number">03</span>
-                <div className="workflow-icon">
-                  <KeyRound />
-                </div>
-                <h3>Authorize. Then share.</h3>
-                <p>
-                  Use your registered security key and iPad authentication. Export the approval for
-                  your team to collect.
-                </p>
-                <span className="step-device">A PORTABLE SIGNED APPROVAL</span>
-              </article>
-            </div>
-          </div>
-        </section>
-
-        <section
-          className="principles-section shell"
-          id="principles"
-          aria-labelledby="principles-heading"
-        >
-          <div className="section-heading">
-            <p className="eyebrow">PURPOSEFUL BY DESIGN</p>
-            <h2 id="principles-heading">
-              Less distraction.
-              <br />
-              More intention.
-            </h2>
-          </div>
-          <div className="principle-grid">
-            <article className="principle offline-principle">
-              <div className="offline-emblem">
-                <WifiOff />
-              </div>
-              <div>
-                <span className="small-label">A VISIBLE BOUNDARY</span>
-                <h3>Offline means offline.</h3>
-                <p>
-                  The iPad app pauses approval when it detects a network connection. Its connection
-                  status stays visible, so you know when the device is ready.
-                </p>
-              </div>
-              <div className="offline-example">
-                <WifiOff />
-                <span>Offline</span>
-                <Check />
-              </div>
-            </article>
-            <article className="principle device-principle">
-              <Fingerprint className="principle-glyph" />
-              <div>
-                <span className="small-label">PERSONAL TO YOUR DEVICE</span>
-                <h3>
-                  Your approval.
-                  <br />
-                  Your keys.
-                </h3>
-                <p>
-                  A device-bound Secure Enclave key, biometric authentication, and a registered
-                  security key bring separate checks to each approval.
-                </p>
-              </div>
-            </article>
-          </div>
-        </section>
-
-        <section
-          className="questions-section shell"
-          id="questions"
-          aria-labelledby="questions-heading"
-        >
-          <div className="section-heading">
-            <p className="eyebrow">A FEW DETAILS</p>
-            <h2 id="questions-heading">Good questions.</h2>
-          </div>
-          <div className="faq-list">
-            {questions.map((item) => (
-              <details key={item.question}>
-                <summary>
-                  {item.question}
-                  <ChevronDown size={19} />
-                </summary>
-                <p>{item.answer}</p>
-              </details>
-            ))}
-          </div>
-        </section>
-
-        <section
-          className="availability-section shell"
-          id="availability"
-          aria-labelledby="availability-heading"
-        >
-          <Image src="/vow-icon.png" alt="Vow app icon" width={72} height={72} />
-          <p className="eyebrow">CURRENTLY IN DEVELOPMENT</p>
-          <h2 id="availability-heading">
-            Taking the time
-            <br />
-            to get it right.
-          </h2>
-          <p>
-            Vow is an early prototype for iPad and Mac.
-            <br />
-            Public availability will follow production validation.
-          </p>
-          <a className="text-link" href="#experience">
-            Take another look <ArrowRight size={17} />
-          </a>
-        </section>
-      </main>
-      <footer className="site-footer shell">
-        <a className="brand" href="#" aria-label="Vow home">
-          vow
-        </a>
-        <p>Shared control. Personal approval.</p>
-        <span>Made for iPad & Mac.</span>
-      </footer>
     </>
   );
 }
 
-function ArrowUpRightIcon() {
+export function Workflow() {
   return (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path
-        d="M4 12 12 4M4 4h8v8"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
+    <section className="section shell" id="workflow" aria-labelledby="workflow-heading">
+      <Reveal className="heading">
+        <h2 id="workflow-heading">
+          Prepared together.
+          <br />
+          Approved individually.
+        </h2>
+        <p>Two apps share one process, and each member keeps their own approval.</p>
+      </Reveal>
+      <ol className="steps">
+        {steps.map(({ icon: Glyph, title, body, device }, index) => (
+          <li key={title}>
+            <Reveal className="step" delay={index * 0.09}>
+              <span className="step-icon">
+                <Glyph size={24} strokeWidth={1.7} />
+              </span>
+              <span className="step-number">0{index + 1}</span>
+              <h3>{title}</h3>
+              <p>{body}</p>
+              <span className="step-device">{device}</span>
+            </Reveal>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+export function Questions() {
+  return (
+    <section className="section shell narrow" id="questions" aria-labelledby="questions-heading">
+      <Reveal className="heading">
+        <h2 id="questions-heading">Good questions.</h2>
+      </Reveal>
+      <div className="faq">
+        {questions.map((item) => (
+          <details key={item.question}>
+            <summary>
+              {item.question}
+              <span className="faq-toggle">
+                <ChevronDown size={18} />
+              </span>
+            </summary>
+            <p>{item.answer}</p>
+          </details>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export function Closing() {
+  return (
+    <section className="shell" id="availability" aria-labelledby="availability-heading">
+      <Reveal className="closing">
+        <Image src="/vow-icon.png" alt="Vow app icon" width={72} height={72} />
+        <p className="tag">Currently in development</p>
+        <h2 id="availability-heading">
+          Taking the time
+          <br />
+          to get it right.
+        </h2>
+        <p>
+          Vow is an early prototype for iPad and Mac. Public availability will follow production
+          validation.
+        </p>
+      </Reveal>
+    </section>
+  );
+}
+
+export function Footer() {
+  return (
+    <footer className="site-footer shell">
+      <a className="brand" href="#" aria-label="Vow home">
+        vow
+      </a>
+      <p>Shared control. Personal approval.</p>
+      <span>Made for iPad and Mac.</span>
+    </footer>
+  );
+}
+
+/** The public product page, with no account collection or third-party analytics. */
+export function Site({ stars }: { stars?: number | null }) {
+  return (
+    <MotionConfig reducedMotion="user">
+      <Header stars={stars} />
+      <main id="main">
+        <Hero />
+        <section className="section shell" id="features" aria-labelledby="features-heading">
+          <Reveal className="heading">
+            <h2 id="features-heading">
+              Built for one decision
+              <br />
+              at a time.
+            </h2>
+            <p>
+              A browser is a busy place. Vow gives the request, your consent and your keys a screen
+              of their own.
+            </p>
+          </Reveal>
+          <Bento />
+        </section>
+        <Workflow />
+        <Questions />
+        <Closing />
+      </main>
+      <Footer />
+    </MotionConfig>
   );
 }

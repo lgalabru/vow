@@ -11,8 +11,6 @@
     "test": "playwright test"
   },
   "dependencies": {
-    "@base-ui/react": "1.9.0",
-    "@solana/design-system": "1.0.1",
     "lucide-react": "^0.468.0",
     "motion": "12.26.0",
     "next": "16.4.6",

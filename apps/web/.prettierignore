@@ -6,3 +6,6 @@ next-env.d.ts
 *.tsbuildinfo
 playwright-report
 test-results
+src/stageshow/kit
+.next-*
+src/components/squads.tsx

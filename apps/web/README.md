@@ -1,8 +1,9 @@
 # Vow website
 
 Public product preview at `https://vow.scarce.sh`, built with Next.js, React,
-Tailwind, Base UI and the Solana design system. System fonts, local assets,
-no analytics, wallet connection or account collection.
+Tailwind's reset, Motion for scroll parallax, and the Stageshow kit for the
+product illustrations. System fonts, local assets, no analytics, wallet
+connection or account collection.
 
 ```sh
 pnpm --dir apps/web install --frozen-lockfile
@@ -13,7 +14,11 @@ pnpm --dir apps/web exec playwright install chromium
 just web-test
 ```
 
-The interactive iPad illustration uses fictional sample data and no signing keys.
+The iPad in the hero is drawn in CSS at the iPad mini's real proportions; its
+screen and the feature tiles are scripted Stageshow scenes (`src/components/device.tsx`,
+`src/components/bento.tsx`) that use fictional sample data and no signing keys.
+They are pictures of the app, not controls. The kit is vendored in
+`src/stageshow/kit` (see `src/stageshow/README.md`) and excluded from lint.
 Keep availability, supported features and security claims consistent with the native
 prototype. The FAQ describes production limitations. There is no download or signup
 endpoint until a public release exists.

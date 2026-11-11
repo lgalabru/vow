@@ -17,7 +17,7 @@ export const metadata: Metadata = {
   twitter: { card: 'summary_large_image' },
 };
 
-export const viewport: Viewport = { themeColor: '#fafaf9' };
+export const viewport: Viewport = { themeColor: '#ffffff' };
 
 /** The public site uses local system fonts and makes no third-party requests. */
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

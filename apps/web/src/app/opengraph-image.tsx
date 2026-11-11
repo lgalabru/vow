@@ -14,12 +14,12 @@ export default function OpenGraphImage() {
         display: 'flex',
         flexDirection: 'column',
         padding: '65px 80px',
-        background: '#fafaf9',
-        color: '#1d1d1f',
+        background: '#ffffff',
+        color: '#0b0b0c',
         fontFamily: 'sans-serif',
       }}
     >
-      <div style={{ display: 'flex', fontSize: 34, fontWeight: 600, color: '#0066cc' }}>vow</div>
+      <div style={{ display: 'flex', fontSize: 34, fontWeight: 600, color: '#0b0b0c' }}>vow</div>
       <div
         style={{
           display: 'flex',
@@ -31,7 +31,7 @@ export default function OpenGraphImage() {
         }}
       >
         <span>Shared control.</span>
-        <span style={{ color: '#75757a' }}>Personal approval.</span>
+        <span style={{ color: '#a1a1a6' }}>Personal approval.</span>
       </div>
       <div style={{ display: 'flex', marginTop: 'auto', fontSize: 22, color: '#6e6e73' }}>
         Built for iPad. Designed to stay offline.

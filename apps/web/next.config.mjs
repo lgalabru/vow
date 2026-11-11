@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // A second build directory lets two variants run side by side while one is picked.
+  distDir: process.env.VOW_DIST_DIR ?? '.next',
   poweredByHeader: false,
   async headers() {
     return [

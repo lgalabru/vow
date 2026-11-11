@@ -1,0 +1,599 @@
+/* The three-factor narrative: a tall section whose pinned stage is driven by
+   the page's scroll. Page-level classes are prefixed fx-. */
+
+.fx-hero {
+  margin-bottom: 0;
+  padding-bottom: 96px;
+}
+
+.fx-factors {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin: 40px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fx-factors li {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 48px;
+  padding: 0 20px 0 8px;
+  border-radius: 999px;
+  background: var(--tile);
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.fx-factors span {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: #fff;
+  font-size: 15px;
+}
+
+.fx-squads {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 36px;
+  color: var(--muted);
+  font-size: 16px;
+}
+
+.fx-squads svg {
+  color: var(--ink);
+}
+
+.fx-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.fx-note {
+  margin-top: 28px;
+  color: #a1a1a6;
+  font-size: 14px;
+  text-align: center;
+}
+
+/* ---- The pinned stage ---- */
+
+.fx-story {
+  position: relative;
+  height: 720vh;
+}
+
+.fx-pin {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(20px, 3.4svh, 36px);
+  height: 100vh;
+  height: 100svh;
+  padding: 84px 24px 20px;
+  text-align: center;
+}
+
+.fx-copy {
+  position: relative;
+  width: min(760px, 100%);
+}
+
+.fx-chapters {
+  display: grid;
+  justify-items: center;
+}
+
+.fx-chapter {
+  grid-area: 1 / 1;
+  opacity: 0;
+  transform: translateY(24px);
+  transition:
+    opacity 320ms ease,
+    transform 520ms cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+}
+
+.fx-chapter[data-show] {
+  opacity: 1;
+  transform: none;
+  transition-delay: 140ms;
+  pointer-events: auto;
+}
+
+.fx-chapter h3 {
+  margin-top: 16px;
+  font-size: clamp(34px, 6.2svh, 60px);
+  font-weight: 650;
+  line-height: 1.04;
+  letter-spacing: -0.04em;
+}
+
+.fx-chapter > p:last-child {
+  max-width: 540px;
+  margin: 14px auto 0;
+  color: var(--muted);
+  font-size: clamp(16px, 2.2svh, 20px);
+  line-height: 1.45;
+  letter-spacing: -0.012em;
+}
+
+.fx-rail {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  width: min(600px, 100%);
+  margin: 0;
+  padding: 0;
+  color: #a1a1a6;
+  font-size: 14px;
+  font-weight: 500;
+  list-style: none;
+}
+
+.fx-rail li {
+  transition: color 240ms ease;
+}
+
+.fx-rail li[data-active] {
+  color: var(--ink);
+}
+
+.fx-rail-track {
+  display: block;
+  height: 6px;
+  margin-bottom: 10px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--tile);
+}
+
+.fx-rail-track span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--green);
+  transform-origin: left;
+}
+
+/* ---- The device, its key and its top button ---- */
+
+.fx-device {
+  /* Sized by the viewport's height, with room at the side for the key */
+  flex: none;
+  width: min(820px, 70svh, 100% - 22vw);
+}
+
+.fx-device .vw-ipad {
+  isolation: isolate;
+}
+
+/* A USB-C security key at the device's scale: about 12.5 x 30 mm */
+.fx-key {
+  position: absolute;
+  z-index: -1;
+  left: calc(100% - 40 * var(--u));
+  top: 50%;
+  display: flex;
+  align-items: center;
+  height: calc(82 * var(--u));
+  margin-top: calc(-41 * var(--u));
+  opacity: 0;
+  transition: opacity 240ms ease;
+}
+
+.fx-key[data-show] {
+  opacity: 1;
+}
+
+.fx-key-plug {
+  width: calc(46 * var(--u));
+  height: calc(54 * var(--u));
+  border-radius: calc(8 * var(--u)) 0 0 calc(8 * var(--u));
+  background: linear-gradient(180deg, #a9abb0, #eceef0 35%, #c9cbcf 70%, #9d9fa4);
+}
+
+.fx-key-body {
+  position: relative;
+  width: calc(150 * var(--u));
+  height: 100%;
+  border-radius: calc(12 * var(--u)) calc(22 * var(--u)) calc(22 * var(--u)) calc(12 * var(--u));
+  background: linear-gradient(190deg, #2b2b2e, #141416 55%, #232326);
+  box-shadow:
+    inset 0 0 0 calc(1 * var(--u)) rgba(255, 255, 255, 0.08),
+    0 calc(16 * var(--u)) calc(30 * var(--u)) calc(-12 * var(--u)) rgba(15, 18, 25, 0.5);
+}
+
+.fx-key-disc {
+  position: absolute;
+  left: calc(26 * var(--u));
+  top: 50%;
+  width: calc(46 * var(--u));
+  height: calc(46 * var(--u));
+  margin-top: calc(-23 * var(--u));
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 32%, #f6e3a6, #d1a94f 60%, #a57f2f);
+  transition: box-shadow 320ms ease;
+}
+
+.fx-key-disc[data-on] {
+  box-shadow:
+    0 0 0 calc(4 * var(--u)) rgba(48, 196, 86, 0.9),
+    0 0 calc(28 * var(--u)) calc(6 * var(--u)) rgba(48, 196, 86, 0.55);
+}
+
+.fx-key-hole {
+  position: absolute;
+  right: calc(16 * var(--u));
+  top: 50%;
+  width: calc(22 * var(--u));
+  height: calc(22 * var(--u));
+  margin-top: calc(-11 * var(--u));
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: inset 0 calc(1 * var(--u)) calc(3 * var(--u)) rgba(0, 0, 0, 0.45);
+}
+
+/* Touch ID lives in the top button */
+.fx-touch {
+  position: absolute;
+  z-index: 2;
+  left: calc(-18 * var(--u));
+  top: calc(104 * var(--u));
+  width: calc(34 * var(--u));
+  height: calc(98 * var(--u));
+  border-radius: calc(17 * var(--u));
+  box-shadow:
+    0 0 0 calc(3 * var(--u)) var(--ink),
+    0 0 0 calc(12 * var(--u)) rgba(11, 11, 12, 0.08);
+  opacity: 0;
+  transform: scale(1.5);
+  transition:
+    opacity 300ms ease,
+    transform 520ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 300ms ease;
+}
+
+.fx-touch[data-show] {
+  opacity: 1;
+  transform: none;
+}
+
+.fx-touch[data-done] {
+  box-shadow:
+    0 0 0 calc(3 * var(--u)) var(--green),
+    0 0 0 calc(12 * var(--u)) rgba(48, 196, 86, 0.18);
+}
+
+/* ---- The screen ---- */
+
+.fx-stage {
+  overflow: hidden;
+  border-radius: calc(22 * var(--u));
+
+  & .ss-stage {
+    --ss-accent: #0a84ff;
+    --ss-success: #30c456;
+    --ss-font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+    background: #f5f5f7;
+  }
+}
+
+.fx-screen {
+  --blue: #0a84ff;
+  --ink: #0b0b0c;
+  --gray: #8a8a8e;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0 14px 14px;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 18px;
+  letter-spacing: -0.01em;
+
+  & .fx-status {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 34px;
+    padding: 2px 4px 0;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  & .fx-status-title {
+    position: absolute;
+    inset: 2px 0 0;
+    display: grid;
+    place-items: center;
+    font-size: 14px;
+  }
+
+  & .fx-body {
+    display: grid;
+    flex: 1;
+    grid-template-columns: minmax(0, 1fr) 190px;
+    gap: 12px;
+    min-height: 0;
+  }
+
+  /* One place, four views: each factor takes its turn */
+  & .fx-focus {
+    position: relative;
+  }
+
+  & .fx-view {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    opacity: 0;
+    transform: scale(0.96);
+    transition:
+      opacity 260ms ease,
+      transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+
+    &[data-show] {
+      opacity: 1;
+      transform: none;
+      transition-delay: 140ms;
+    }
+  }
+
+  & .fx-card {
+    align-self: stretch;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 18px 20px;
+    border-radius: 16px;
+    background: #fff;
+    text-align: left;
+  }
+
+  & .fx-card-meta {
+    color: var(--gray);
+    font-size: 12px;
+  }
+
+  & .fx-card-title {
+    margin: 4px 0 2px;
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 30px;
+    letter-spacing: -0.02em;
+  }
+
+  & .fx-card-lines {
+    margin-top: auto;
+    font-size: 13px;
+
+    & div {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 9px 0;
+      white-space: nowrap;
+    }
+
+    & div + div {
+      box-shadow: inset 0 1px 0 rgba(60, 60, 67, 0.12);
+    }
+
+    & div:last-child {
+      padding-bottom: 0;
+    }
+
+    & span {
+      color: var(--gray);
+    }
+
+    & b {
+      font-weight: 500;
+    }
+  }
+
+  & .fx-pad-what {
+    position: absolute;
+    left: 20px;
+    top: 16px;
+    color: var(--gray);
+    font-size: 12px;
+  }
+
+  & .fx-pad {
+    position: relative;
+    align-self: stretch;
+    flex: 1;
+    border-radius: 16px;
+    background: #fff;
+
+    &::after {
+      content: '';
+      position: absolute;
+      inset: auto 20px 56px;
+      height: 1px;
+      background: rgba(60, 60, 67, 0.16);
+    }
+
+    & svg {
+      position: absolute;
+      inset: 56px 24px 64px;
+      width: calc(100% - 48px);
+      height: calc(100% - 120px);
+      overflow: visible;
+    }
+
+    & path {
+      fill: none;
+      stroke: #101012;
+      stroke-width: 2.2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+  }
+
+  & .fx-disc {
+    display: grid;
+    place-items: center;
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: #fff;
+    color: var(--ink);
+    transition:
+      background-color 320ms ease,
+      color 320ms ease;
+
+    &[data-on] {
+      background: #30c456;
+      color: #fff;
+    }
+  }
+
+  & .fx-prompt {
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  & .fx-prompt--large {
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 30px;
+    letter-spacing: -0.02em;
+  }
+
+  & .fx-wait,
+  & .fx-hint {
+    display: grid;
+    place-items: center;
+    height: 18px;
+    margin-top: -4px;
+    color: var(--gray);
+    font-size: 12px;
+    opacity: 0;
+    transition: opacity 240ms ease;
+
+    &[data-show] {
+      opacity: 1;
+    }
+  }
+
+  & .fx-seal {
+    color: #f5f5f7;
+    fill: var(--blue);
+  }
+
+  /* The request, then the running tally */
+  & .fx-side {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  & .fx-network {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: 16px;
+    background: #fff;
+    text-align: left;
+    white-space: nowrap;
+
+    & > span:last-child {
+      display: grid;
+      gap: 1px;
+    }
+
+    & b {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    & span span {
+      color: var(--gray);
+      font-size: 12px;
+    }
+  }
+
+  & .fx-network-glyph {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #ececef;
+    color: #8a8a8e;
+    transition:
+      background-color 320ms ease,
+      color 320ms ease;
+  }
+
+  & .fx-network[data-offline] .fx-network-glyph {
+    background: #30c456;
+    color: #fff;
+  }
+
+  & .fx-list {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 14px;
+    border-radius: 16px;
+    background: #fff;
+  }
+
+  & .fx-row {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--gray);
+    transition: color 240ms ease;
+
+    & + .fx-row {
+      box-shadow: inset 0 1px 0 rgba(60, 60, 67, 0.12);
+    }
+
+    &[data-done] {
+      color: var(--ink);
+    }
+  }
+}
+
+@media (max-height: 720px) {
+  .fx-rail {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .fx-device {
+    width: min(100% - 16vw, 70svh);
+  }
+}

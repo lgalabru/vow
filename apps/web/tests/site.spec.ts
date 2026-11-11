@@ -1,24 +1,20 @@
 import { expect, test } from '@playwright/test';
 
-test('approval preview supports keyboard navigation without signing', async ({ page }) => {
+test('landing page presents the product without signing anything', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(
     'Shared control.Personal approval.',
   );
-  const authorize = page.getByRole('tab', { name: '2 Authorize' });
-  await expect(authorize).toHaveAttribute('aria-selected', 'true');
-  await authorize.focus();
-  await page.keyboard.press('ArrowRight');
-  await expect(page.getByRole('tab', { name: '3 Export' })).toHaveAttribute(
-    'aria-selected',
-    'true',
-  );
-  await expect(page.getByText('Bring your approval back to the team.')).toBeVisible();
-  await page.getByRole('tab', { name: '1 Review' }).click();
-  await expect(page.getByText('Understand the request.')).toBeVisible();
   await expect(
-    page.getByText('Interactive preview with sample data. No signing keys are used.'),
+    page.getByText('Illustration with sample data. No signing keys are used.'),
   ).toBeVisible();
+  // The illustration is a picture of the app, not a control surface.
+  await expect(page.getByRole('button')).toHaveCount(0);
+  await page
+    .getByRole('heading', { name: 'Built for one decision at a time.' })
+    .scrollIntoViewIfNeeded();
+  await expect(page.getByText('Offline means offline.')).toBeVisible();
+  await expect(page.getByText('Approvals collected')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
@@ -28,7 +24,11 @@ test('availability and limitations are discoverable', async ({ page }) => {
   await page.goto('/');
   await page.getByText('Can I use Vow with a live treasury?', { exact: true }).click();
   await expect(page.getByText(/There is no public App Store or TestFlight release/)).toBeVisible();
-  await page.getByRole('link', { name: /In development/ }).click();
+  await expect(page.getByRole('link', { name: /In development/ })).toHaveAttribute(
+    'href',
+    'https://github.com/lgalabru/vow',
+  );
+  await page.locator('#availability').scrollIntoViewIfNeeded();
   await expect(
     page.getByRole('heading', { name: 'Taking the time to get it right.' }),
   ).toBeInViewport();
