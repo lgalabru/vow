@@ -88,7 +88,7 @@ export function Header({
       <header className="site-header">
         <nav className="navigation" aria-label="Main navigation">
           <a className="brand" href="#" aria-label="Vow home">
-            <Image src="/vow-mark.png" alt="" width={28} height={28} />
+            <Image src="/vow-glyph.png" alt="" width={36} height={31} />
             vow
           </a>
           <div className="nav-links">

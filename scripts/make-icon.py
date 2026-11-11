@@ -9,7 +9,8 @@ Writes:
                                         over an indigo fill)
   apps/apple/Vow/Assets.xcassets/AppIcon.appiconset
                                         flat renditions of the same design
-  apps/web/public/vow-mark.png          the mark in the site's header
+  apps/web/public/vow-mark.png          the icon on the site's closing panel
+  apps/web/public/vow-glyph.png         the bare V in the site's header
   apps/web/src/app/icon.png             the site's favicon
 """
 
@@ -44,13 +45,17 @@ MAC_BODY = 824
 MAC_SHADOW = dict(offset=12, blur=14, alpha=90)
 
 
-def glyph_layer() -> Image.Image:
-    """The artwork alone on a transparent 1024 canvas, sized and placed."""
+def artwork() -> Image.Image:
+    """The V alone, cropped to its edges."""
     art = Image.open(SOURCE).convert("RGBA")
     alpha = art.getchannel("A").point(lambda v: 0 if v < 12 else v)  # drop the cut-out's haze
     art.putalpha(alpha)
-    box = alpha.getbbox()
-    art = art.crop(box)
+    return art.crop(alpha.getbbox())
+
+
+def glyph_layer() -> Image.Image:
+    """The artwork alone on a transparent 1024 canvas, sized and placed."""
+    art = artwork()
     height = round(art.height * GLYPH_WIDTH / art.width)
     art = art.resize((GLYPH_WIDTH, height), Image.LANCZOS)
     layer = Image.new("RGBA", (CANVAS, CANVAS), (0, 0, 0, 0))
@@ -141,7 +146,12 @@ def main() -> None:
             size = points * scale
             desktop.resize((size, size), Image.LANCZOS).save(ICONSET / f"AppIcon-{points}@{scale}x.png")
 
-    # The website: the square mark for the header, a rounded one for the tab.
+    # The website: the bare V for the header, the square icon for the closing
+    # panel, a rounded one for the tab.
+    bare = artwork()
+    bare.resize((280, round(bare.height * 280 / bare.width)), Image.LANCZOS).save(
+        WEB / "public/vow-glyph.png"
+    )
     tile.resize((256, 256), Image.LANCZOS).save(WEB / "public/vow-mark.png")
     rounded(tile).resize((256, 256), Image.LANCZOS).save(WEB / "src/app/icon.png")
 

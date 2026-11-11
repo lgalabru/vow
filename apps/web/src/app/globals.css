@@ -91,7 +91,7 @@ svg:not(:where(.ss-stage *)) {
   align-items: center;
   gap: 28px;
   height: 56px;
-  padding: 0 8px 0 18px;
+  padding: 0 8px 0 14px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.78);
   box-shadow:
@@ -103,13 +103,10 @@ svg:not(:where(.ss-stage *)) {
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   font-size: 19px;
   font-weight: 650;
   letter-spacing: -0.03em;
-}
-.brand img {
-  border-radius: 8px;
 }
 .nav-links {
   display: flex;
