@@ -44,6 +44,64 @@
       }
       return data
     }
+    // Reset authority is local Keychain state, never a field in a public/importable archive.
+    private static var resetQuery: [String: Any] {
+      var q = query("reset-intent")
+      q[kSecAttrService as String] = "org.vow.reset-intent.v1"
+      return q
+    }
+    static func hasResetIntent() throws -> Bool {
+      var q = resetQuery
+      q[kSecReturnData as String] = true
+      q[kSecMatchLimit as String] = kSecMatchLimitOne
+      var result: CFTypeRef?
+      let status = SecItemCopyMatching(q as CFDictionary, &result)
+      if status == errSecItemNotFound { return false }
+      guard status == errSecSuccess, (result as? Data) == Data("v1".utf8) else {
+        throw VowError(message: "Cannot read Vow’s reset state. Unlock the iPad and reopen Vow.")
+      }
+      return true
+    }
+    static func beginReset() throws {
+      let attributes: [String: Any] = [
+        kSecValueData as String: Data("v1".utf8),
+        kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+      ]
+      var status = SecItemUpdate(resetQuery as CFDictionary, attributes as CFDictionary)
+      if status == errSecItemNotFound {
+        status = SecItemAdd(resetQuery.merging(attributes) { _, new in new } as CFDictionary, nil)
+      }
+      guard status == errSecSuccess else {
+        throw VowError(
+          message: "Could not begin reset (Keychain \(status)). No signing key was deleted.")
+      }
+    }
+    static func finishReset() throws {
+      let status = SecItemDelete(resetQuery as CFDictionary)
+      guard status == errSecSuccess || status == errSecItemNotFound else {
+        throw VowError(
+          message: "Could not finish reset (Keychain \(status)). Reopen Vow to finish cleanup.")
+      }
+    }
+    static func eraseAll() throws {
+      var q: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: "org.vow.signing-identity.v1",
+        kSecAttrSynchronizable as String: false,
+      ]
+      #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--ui-test-") }) {
+          q = query("identity")
+        }
+      #endif
+      let status = SecItemDelete(q as CFDictionary)
+      guard status == errSecSuccess || status == errSecItemNotFound else {
+        throw VowError(
+          message:
+            "Could not delete Vow’s signing identity (Keychain \(status)). Unlock the iPad and retry. Reset has not completed."
+        )
+      }
+    }
     static func save(_ data: Data, name: String, existing: Bool) throws {
       #if targetEnvironment(simulator)
         let accessibility = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
@@ -204,6 +262,19 @@
         enrollmentPackage = nil
         registeredSecurityKey = nil
       }
+    }
+    func clearCachedIdentity() {
+      record = nil
+      enrollmentPackage = nil
+      registeredSecurityKey = nil
+      pendingNativeKey = nil
+      restoredFromKeychain = false
+      loadingError = nil
+      #if targetEnvironment(simulator)
+        software = nil
+      #else
+        hardware = nil
+      #endif
     }
     func create() throws {
       guard loadingError == nil else { throw VowError(message: loadingError!) }

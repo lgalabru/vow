@@ -367,7 +367,12 @@ impl Session {
         let decoded = decode(&intent)?;
         let quorum = self.active_quorum()?;
         let proposal = Proposal {
-            format: crate::PROPOSAL_FORMAT.into(),
+            format: if quorum.seats.is_empty() {
+                crate::PROPOSAL_FORMAT
+            } else {
+                crate::profiles::PROPOSAL_FORMAT
+            }
+            .into(),
             id: captured.id.clone(),
             organization: self.organization.clone(),
             organization_id: self.organization_id.clone(),

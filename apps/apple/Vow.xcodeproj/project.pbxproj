@@ -25,8 +25,8 @@
 		A00000000000000000000032 /* VowUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VowUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B00000000000000000000006 /* Vow-mac.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Vow-mac.entitlements"; sourceTree = "<group>"; };
 		B00000000000000000000007 /* Vow-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Vow-Info.plist"; sourceTree = "<group>"; };
-		B00000000000000000000008 /* NativeSecurityKey.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = NativeSecurityKey.xcconfig; sourceTree = "<group>";};
-		B00000000000000000000009 /* Vow-iPad-NativeSecurityKey.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Vow-iPad-NativeSecurityKey.entitlements"; sourceTree = "<group>";};
+		B00000000000000000000008 /* NativeSecurityKey.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = NativeSecurityKey.xcconfig; sourceTree = "<group>"; };
+		B00000000000000000000009 /* Vow-iPad-NativeSecurityKey.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Vow-iPad-NativeSecurityKey.entitlements"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -75,8 +75,8 @@
 		B00000000000000000000004 /* Config */ = {
 			isa = PBXGroup;
 			children = (
-                B00000000000000000000008 /* NativeSecurityKey.xcconfig */,
-                B00000000000000000000009 /* Vow-iPad-NativeSecurityKey.entitlements */,
+				B00000000000000000000008 /* NativeSecurityKey.xcconfig */,
+				B00000000000000000000009 /* Vow-iPad-NativeSecurityKey.entitlements */,
 				B00000000000000000000006 /* Vow-mac.entitlements */,
 				B00000000000000000000007 /* Vow-Info.plist */,
 			);
@@ -247,11 +247,12 @@
 		};
 		A00000000000000000000022 /* Debug */ = {
 			isa = XCBuildConfiguration;
-            baseConfigurationReference = B00000000000000000000008 /* NativeSecurityKey.xcconfig */;
+			baseConfigurationReference = B00000000000000000000008 /* NativeSecurityKey.xcconfig */;
 			buildSettings = {
-                "CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = "$(VOW_IPAD_ENTITLEMENTS)";
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = "$(VOW_IPAD_ENTITLEMENTS)";
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = "Config/Vow-Simulator.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -294,11 +295,12 @@
 		};
 		A00000000000000000000023 /* Release */ = {
 			isa = XCBuildConfiguration;
-            baseConfigurationReference = B00000000000000000000008 /* NativeSecurityKey.xcconfig */;
+			baseConfigurationReference = B00000000000000000000008 /* NativeSecurityKey.xcconfig */;
 			buildSettings = {
-                "CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = "$(VOW_IPAD_ENTITLEMENTS)";
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = "$(VOW_IPAD_ENTITLEMENTS)";
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = "Config/Vow-Simulator.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;

@@ -235,16 +235,23 @@ struct NetworkStatusBar: View {
     @Environment(NetworkStatus.self) private var network
     @State private var keys = DeviceKey()
     @State private var securityKey = SecurityKeyMonitor()
+    @State private var requiresProfileSetup: Bool?
     @Environment(\.scenePhase) private var scenePhase
     var body: some View {
       Group {
         if network.isOffline {
-          if keys.isEnrolled || keys.isUITestCompleted {
-            SignerRootView(model: model, keys: keys)
-              .id(network.interruptionEpoch)
+          if let error = model.storageFailure {
+            ContentUnavailableView(
+              "Profiles could not be loaded", systemImage: "externaldrive.badge.exclamationmark",
+              description: Text(error))
+          } else if requiresProfileSetup ?? (!model.hasSigningProfiles && !keys.isUITestCompleted) {
+            ProfileCreationSheet(
+              model: model, firstLaunch: true,
+              onFinished: { requiresProfileSetup = false }, deviceKeys: keys
+            )
+            .id(network.interruptionEpoch)
           } else {
-            DeviceOnboardingView(keys: keys, model: model)
-              .id(network.interruptionEpoch)
+            SignerRootView(model: model, keys: keys).id(network.interruptionEpoch)
           }
         } else {
           NetworkBlockedView().networkStatusChrome()
@@ -256,10 +263,20 @@ struct NetworkStatusBar: View {
         if phase == .active { securityKey.start() }
       }
       .onAppear {
+        if requiresProfileSetup == nil {
+          requiresProfileSetup = !model.hasSigningProfiles && !keys.isUITestCompleted
+        }
         securityKey.configure(
           expected: keys.registeredSecurityKey,
-          preferNative: NativeSecurityKey.configuration(model: model).enabled)
+          preferNative: NativeSecurityKey.prefersNativeEnrollment(device: keys))
         if network.isOffline { model.importPendingFile() }
+      }
+      .onChange(of: model.workspaceResetGeneration) { _, _ in
+        securityKey.stop()
+        keys.clearCachedIdentity()
+        securityKey.configure(expected: nil, preferNative: false)
+        securityKey.start()
+        requiresProfileSetup = true
       }
       .onChange(of: network.interruptionEpoch) { _, _ in model.perform("cancel") }
       .onChange(of: network.isOffline) { _, offline in if offline { model.importPendingFile() } }

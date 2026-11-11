@@ -23,11 +23,25 @@
   final class NativeSecurityKey: NSObject, ASAuthorizationControllerDelegate,
     ASAuthorizationControllerPresentationContextProviding
   {
+    static func prefersNativeEnrollment(device: DeviceKey) -> Bool {
+      if let saved = device.registeredSecurityKey {
+        return saved.usesNative
+      }
+      #if DEBUG && targetEnvironment(simulator)
+        return ProcessInfo.processInfo.arguments.contains("--ui-test-native-security-key")
+      #else
+        return false
+      #endif
+    }
     static func configuration(model: VowModel) -> NativeKeyConfiguration {
       let value: NativeKeyConfiguration? = try? model.call("native_security_key_configuration")
       #if DEBUG && targetEnvironment(simulator)
         let arguments = ProcessInfo.processInfo.arguments
-        if arguments.contains("--ui-test-native-security-key"), let value { return value }
+        if arguments.contains("--ui-test-native-security-key")
+          || arguments.contains("--ui-test-native-domain-enabled"), let value
+        {
+          return value
+        }
         if arguments.contains(where: { $0.hasPrefix("--ui-test-") }) {
           return NativeKeyConfiguration(enabled: false, rpId: nil)
         }
@@ -206,6 +220,14 @@
           reason = String(detail.prefix(300))
         }
         current = next.userInfo[NSUnderlyingErrorKey] as? NSError
+      }
+      if root.domain == ASAuthorizationErrorDomain, root.code == 1004,
+        reason?.localizedCaseInsensitiveContains("webcredentials association") == true
+      {
+        return VowError(
+          message:
+            "iPadOS has not verified Vow’s domain association. Close this approval, install or update Vow while the iPad is online, then disconnect and retry. Your key and PIN do not need resetting. Support: AS1004."
+        )
       }
       let message =
         root.domain == ASAuthorizationErrorDomain && root.code == 1005

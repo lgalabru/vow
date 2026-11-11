@@ -1,0 +1,48 @@
+name: Cryptography
+
+on:
+  push:
+    branches: [main]
+    paths: ['crates/**', 'Cargo.toml', 'Cargo.lock', '.github/workflows/crypto.yml', 'Justfile', 'apps/apple/Vow/PIVPINPolicy.swift', 'apps/apple/Vow/PIVSetupCoordinator.swift', 'apps/apple/PolicyTests/**', 'scripts/test-piv-pin-policy.sh']
+  pull_request:
+    paths: ['crates/**', 'Cargo.toml', 'Cargo.lock', '.github/workflows/crypto.yml', 'Justfile', 'apps/apple/Vow/PIVPINPolicy.swift', 'apps/apple/Vow/PIVSetupCoordinator.swift', 'apps/apple/PolicyTests/**', 'scripts/test-piv-pin-policy.sh']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: crypto-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: extractions/setup-just@v3
+      - run: just crypto-fmt
+      - run: just crypto-test
+      - run: just crypto-lint
+
+  ledger:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: extractions/setup-just@v3
+      - run: just ledger-test
+
+  pin-policy:
+    runs-on: macos-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/test-piv-pin-policy.sh

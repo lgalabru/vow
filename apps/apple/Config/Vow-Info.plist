@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Connect to your Ledger Nano X, Nano Gen5 or Flex to verify its account and approve signing requests. Vow does not use Bluetooth for internet access.</string>
 	<key>VowNativeSecurityKeyDomain</key>
 	<string>$(VOW_WEBAUTHN_RP_ID)</string>
 	<key>CFBundleDocumentTypes</key>
@@ -9,6 +11,13 @@
 		<dict>
 			<key>CFBundleTypeName</key>
 			<string>Vow transaction</string>
+			<key>CFBundleTypeIconFile</key>
+			<string>VowDocument.icns</string>
+			<key>CFBundleTypeIconFiles</key>
+			<array>
+				<string>VowDocument64.png</string>
+				<string>VowDocument320.png</string>
+			</array>
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
 			<key>LSHandlerRank</key>
@@ -44,6 +53,13 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Vow transaction</string>
+			<key>UTTypeIconFile</key>
+			<string>VowDocument.icns</string>
+			<key>UTTypeIconFiles</key>
+			<array>
+				<string>VowDocument64.png</string>
+				<string>VowDocument320.png</string>
+			</array>
 			<key>UTTypeIdentifier</key>
 			<string>org.vow.transaction</string>
 			<key>UTTypeTagSpecification</key>

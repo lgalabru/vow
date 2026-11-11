@@ -13,3 +13,4 @@ serde_json.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 vow-simulation = { path = "../simulation" }
+vow-ledger = { path = "../ledger" }

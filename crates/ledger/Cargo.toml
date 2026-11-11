@@ -1,0 +1,21 @@
+[package]
+name = "vow-ledger"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde_json.workspace = true
+hex.workspace = true
+vow-core = { path = "../core" }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# Published PR #358. Pin its reviewed head, never a moving branch or local path.
+solana-keychain = { git = "https://github.com/solana-foundation/solana-keychain", rev = "0b7bf8368ea5650e6870504c6c36ac2d1aad3bc8", default-features = false, features = ["ledger", "sdk-v2"] }
+tokio = { version = "1", features = ["rt"] }
+# remote-wallet's transitive Trezor transport needs libusb. Embed the vendored
+# implementation in the Rust static library instead of requiring Homebrew dylibs.
+libusb1-sys = { version = "0.7", features = ["vendored"] }
+
+[package.metadata.cargo-machete]
+ignored = ["libusb1-sys"]

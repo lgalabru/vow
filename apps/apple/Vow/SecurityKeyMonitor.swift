@@ -16,12 +16,20 @@
     private var connection: USBSmartCardConnection?
     private var session: Management.Session?
     private var serial: UInt?
+    private var firmware: String?
     private var monitorTask: Task<Void, Never>?
     private var disconnectTask: Task<Void, Never>?
     private var generation: UInt64 = 0
     private var performingPIVOperation = false
+    private var diagnosing = false
+    private var simulatedProvisioned = false
+    private var rejectedFactoryPINSerials: Set<UInt> = []
+    struct PINEntryRequired: LocalizedError {
+      var retries: Int? = nil
+      var errorDescription: String? { "Enter your existing smart-card PIN." }
+    }
     private var configured = false
-    private var usesNativePresence = false
+    private(set) var usesNativePresence = false
     private var nativeSlot: String?
     private var slotObserver: NSKeyValueObservation?
     private(set) var expectedKey: RegisteredSecurityKey?
@@ -46,6 +54,14 @@
       usesNativePresence = native
       start()
     }
+    var isDirectUSBReady: Bool {
+      guard !usesNativePresence, isConnected else { return false }
+      #if DEBUG && targetEnvironment(simulator)
+        if isTestControlled { return true }
+      #endif
+      return connection != nil
+    }
+    var isNativePresenceReady: Bool { usesNativePresence && isConnected }
     var connectedSerial: UInt? { serial }
 
     #if DEBUG && targetEnvironment(simulator)
@@ -184,6 +200,7 @@
         connection = next
         session = management
         serial = info.serialNumber
+        firmware = "\(info.version)"
         status = .connected
         detail = "USB-C connected · firmware \(info.version)"
         interruptionEpoch &+= 1
@@ -216,6 +233,9 @@
 
     /// Recheck the same live USB connection before and after signing.
     func confirmPresence(epoch: UInt64) async throws {
+      guard !diagnosing else {
+        throw VowError(message: "Wait for the security-key check to finish before signing.")
+      }
       guard isConnected, interruptionEpoch == epoch else {
         throw VowError(message: "Connect YubiKey before authorizing.")
       }
@@ -259,9 +279,10 @@
       let publicKeyHex: String?
       let serial: UInt
       let defaultPIN: Bool
-      let retries: Int
+      var retries: Int
       var usesFIDO = false
-      var automaticCreation = false
+      var requiresAdministratorSetup = false
+      var requiresManagementKey = false
     }
     struct RegistrationDraft {
       let key: RegisteredSecurityKey
@@ -315,7 +336,9 @@
         throw error
       }
     }
-    func inspectCredential() async throws -> CredentialInfo {
+    private func inspectCredential(
+      on override: USBSmartCardConnection? = nil, serial overrideSerial: UInt? = nil
+    ) async throws -> CredentialInfo {
       guard !performingPIVOperation else {
         throw VowError(message: "A security-key operation is already in progress.")
       }
@@ -327,7 +350,9 @@
               throw CTAP2.SessionError.responseParseError("fixture", source: .here())
             }
           }
-          if ProcessInfo.processInfo.arguments.contains("--ui-test-smartcard-unconfigured") {
+          if ProcessInfo.processInfo.arguments.contains("--ui-test-smartcard-unconfigured"),
+            !simulatedProvisioned
+          {
             _ = try await OfflineFIDO.openIfAvailable(requiresRegisteredFIDO: false) {
               throw CTAP2.SessionError.featureNotSupported(source: .here())
             }
@@ -335,15 +360,27 @@
           }
           return CredentialInfo(
             publicKeyHex: try fixtureKey.publicKey.compressedRepresentation.hexString,
-            serial: 424242, defaultPIN: false, retries: 3,
-            usesFIDO: ProcessInfo.processInfo.arguments.contains("--ui-test-fido2"))
+            serial: 424242,
+            defaultPIN: ProcessInfo.processInfo.arguments.contains(
+              "--ui-test-smartcard-factory-pin")
+              || (simulatedProvisioned
+                && ProcessInfo.processInfo.arguments.contains("--ui-test-smartcard-unconfigured")),
+            retries: 3,
+            usesFIDO: ProcessInfo.processInfo.arguments.contains("--ui-test-fido2"),
+            requiresAdministratorSetup: !simulatedProvisioned
+              && ProcessInfo.processInfo.arguments.contains(
+                "--ui-test-smartcard-default-management")
+          )
         }
       #endif
       performingPIVOperation = true
       defer { performingPIVOperation = false }
       let epoch = interruptionEpoch
-      if expectedKey == nil || expectedKey?.usesFIDO == true {
-        guard let connection else { throw VowError(message: "Reconnect the security key.") }
+      let serial = overrideSerial ?? self.serial
+      guard let connection = override ?? self.connection else {
+        throw VowError(message: "Reconnect the security key.")
+      }
+      if expectedKey == nil || expectedKey?.usesFIDO == true || expectedKey?.usesNative == true {
         let fido = try await OfflineFIDO.openIfAvailable(
           requiresRegisteredFIDO: expectedKey?.usesFIDO == true
         ) {
@@ -368,33 +405,133 @@
             retries: retries.retries, usesFIDO: true)
         }
       }
-      let piv = try await openPIV()
+      let piv = try await PIVSession.makeSession(connection: connection)
       let publicKey = try await credential(piv)
       let pin = try await piv.getPinMetadata()
-      let management = publicKey == nil ? try await piv.getManagementKeyMetadata() : nil
+      let management = try await piv.getManagementKeyMetadata()
+      let puk = try await piv.getPukMetadata()
       guard interruptionEpoch == epoch, isConnected, let serial else {
         throw VowError(message: "The security-key connection changed. Inspect it again.")
       }
+      let setupRecord = try PIVProvisioningRecord.load(serial: serial)
       return CredentialInfo(
         publicKeyHex: publicKey, serial: serial, defaultPIN: pin.isDefault,
-        retries: pin.retriesRemaining, automaticCreation: management?.isDefault == true)
+        retries: pin.retriesRemaining,
+        requiresAdministratorSetup: management.isDefault || puk.isDefault,
+        requiresManagementKey: !management.isDefault && (publicKey == nil || puk.isDefault)
+          && setupRecord == nil)
+    }
+    /// Explicit setup action only. Capability inspection never writes to the key.
+    func prepareSmartCard(pin: String, managementKey: String) async throws {
+      guard !usesNativePresence, !performingPIVOperation, isDirectUSBReady,
+        expectedKey == nil
+      else {
+        throw VowError(message: "This registration cannot be changed during setup.")
+      }
+      #if DEBUG && targetEnvironment(simulator)
+        if isTestControlled {
+          simulatedProvisioned = true
+          return
+        }
+      #endif
+      guard let serial else { throw VowError(message: "Reconnect your YubiKey.") }
+      performingPIVOperation = true
+      defer { performingPIVOperation = false }
+      let epoch = interruptionEpoch
+      func checkConnection() throws {
+        try Task.checkCancellation()
+        guard self.interruptionEpoch == epoch, self.isDirectUSBReady else {
+          throw VowError(message: "The key was disconnected. Reconnect it to resume setup.")
+        }
+      }
+      let piv = try await openPIV()
+      _ = try await credential(piv)  // Fails closed if the location is occupied by an incompatible key.
+      try await verifyPIN(pin, session: piv)
+      let management = try await piv.getManagementKeyMetadata()
+      let puk = try await piv.getPukMetadata()
+      let existingRecord = try PIVProvisioningRecord.load(serial: serial)
+      let suppliedKey = managementKey.filter { !$0.isWhitespace }
+      if !management.isDefault && existingRecord == nil && suppliedKey.isEmpty {
+        throw VowError(
+          message: "This key has a custom setup key. Enter it below; your PIN is not the setup key."
+        )
+      }
+      let authKey: Data
+      if management.isDefault {
+        authKey = try Data(hex: "010203040506070801020304050607080102030405060708")
+      } else if let existingRecord {
+        authKey = existingRecord.managementKey
+      } else {
+        authKey = try Data(hex: suppliedKey)
+        let expectedLength: Int
+        switch management.keyType {
+        case .tripleDES, .aes192: expectedLength = 24
+        case .aes128: expectedLength = 16
+        case .aes256: expectedLength = 32
+        }
+        guard authKey.count == expectedLength else {
+          throw VowError(message: "Enter the existing smart-card setup key in hexadecimal.")
+        }
+      }
+      try await PIVSetupCoordinator.run(
+        state: .init(
+          factoryManagement: management.isDefault, factoryRecovery: puk.isDefault,
+          recoveryRetries: puk.retriesRemaining,
+          supportsSecureSetup: await piv.supports(PIVSessionFeature.aesKey)),
+        authenticationKey: authKey, saved: existingRecord,
+        makeSecrets: {
+          try PIVProvisioningRecord.make(
+            serial: serial,
+            type: management.isDefault
+              ? PIV.ManagementKeyType.aes256.rawValue : management.keyType.rawValue,
+            existingManagementKey: management.isDefault ? nil : authKey)
+        },
+        persist: { try PIVProvisioningRecord.persist($0) },
+        operations: .init(
+          check: { try checkConnection() },
+          credential: { try await self.credential(piv) },
+          authenticate: { try await piv.authenticate(with: $0) },
+          rotateManagement: { record in
+            guard let type = PIV.ManagementKeyType(rawValue: record.managementType) else {
+              throw VowError(message: "Saved key setup is invalid. Nothing was changed.")
+            }
+            try await piv.setManagementKey(
+              record.managementKey,
+              type: type, requiresTouch: true)
+          },
+          rotateRecovery: { try await piv.changePuk(from: "12345678", to: $0) },
+          generate: {
+            _ = try await piv.generateKey(
+              in: .retired1, type: .ec(.secp256r1),
+              pinPolicy: .always, touchPolicy: .always)
+          }))
     }
     private func verifyPIN(_ pin: String, session: PIVSession) async throws {
-      guard (6...8).contains(pin.utf8.count), !pin.utf8.contains(0xff) else {
-        throw VowError(
-          message: "Enter your existing smart-card PIN. This is separate from a FIDO2 sign-in PIN.")
-      }
       let metadata = try await session.getPinMetadata()
-      guard metadata.retriesRemaining > 1 else {
+      let automatic = pin.isEmpty
+      let resolvedPIN: String
+      switch PIVPINPolicy.decide(
+        supplied: pin, isFactory: metadata.isDefault && serial != nil,
+        retries: metadata.retriesRemaining,
+        factoryAttemptRejected: serial.map { rejectedFactoryPINSerials.contains($0) } ?? true
+      ) {
+      case .verify(let selected): resolvedPIN = selected
+      case .requestPIN: throw PINEntryRequired(retries: metadata.retriesRemaining)
+      case .invalidPIN: throw VowError(message: "Enter your existing smart-card PIN.")
+      case .blocked:
         throw VowError(
           message:
             "Only \(metadata.retriesRemaining) PIV PIN attempts remain. Vow will not use the final attempt. Contact your key administrator."
         )
       }
       try Task.checkCancellation()
-      switch try await session.verifyPin(pin) {
+      switch try await session.verifyPin(resolvedPIN) {
       case .success: return
       case .fail(let retries):
+        if automatic, let serial {
+          rejectedFactoryPINSerials.insert(serial)
+          throw PINEntryRequired(retries: retries)
+        }
         throw VowError(
           message: "Incorrect PIV PIN. \(retries) attempts remain. No automatic retry was made.")
       case .pinLocked:
@@ -402,6 +539,125 @@
           message:
             "The PIV PIN is blocked. Contact your key administrator; Vow will not reset this YubiKey."
         )
+      }
+    }
+    private func policy(for info: CredentialInfo, model: VowModel) throws -> HardwareKeyDecision {
+      var fields: [String: Any] = [
+        "direct_fido": info.usesFIDO
+          ? "supported"
+          : expectedKey == nil || expectedKey?.usesNative == true
+            ? "unsupported" : "unavailable",
+        "piv": info.usesFIDO ? "unavailable" : "supported",
+        "piv_ready": !info.usesFIDO && !info.requiresAdministratorSetup
+          && info.publicKeyHex != nil,
+        "native_configured": NativeSecurityKey.configuration(model: model).enabled,
+      ]
+      if let expectedKey { fields["enrolled_method"] = expectedKey.kind ?? "piv" }
+      return try model.call("hardware_key_policy", fields)
+    }
+    func inspectCredential(model: VowModel) async throws -> CredentialInfo {
+      guard !usesNativePresence else {
+        throw VowError(
+          message: "Direct USB setup is not ready. Return to the signing method and try again.")
+      }
+      let info = try await inspectCredential()
+      let decision = try policy(for: info, model: model)
+      guard decision.state != "blocked", decision.method == (info.usesFIDO ? "fido2" : "piv") else {
+        throw VowError(message: decision.reason)
+      }
+      return info
+    }
+    struct Diagnostic: Codable {
+      let format: String
+      let firmware: String
+      let probeState: String
+      let detail: String?
+      let transport: String
+      let availableMethod: String
+      let requiresMacSetup: Bool
+      let enrolledMethod: String?
+      let decision: HardwareKeyDecision
+      var export: String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        return (try? String(decoding: encoder.encode(self), as: UTF8.self)) ?? ""
+      }
+    }
+    /// Called from Settings diagnostics, outside enrollment and native authorization sheets.
+    /// Reads device/app metadata only. Never sends a PIN or creates a credential.
+    func diagnose(model: VowModel) async throws -> Diagnostic {
+      guard !performingPIVOperation, isConnected else {
+        throw VowError(
+          message: "Connect the key and finish any active security-key operation first.")
+      }
+      let epoch = interruptionEpoch
+      var temporary: USBSmartCardConnection?
+      do {
+        let probe: USBSmartCardConnection?
+        let probeSerial: UInt?
+        let version: String
+        #if DEBUG && targetEnvironment(simulator)
+          guard isTestControlled else {
+            throw VowError(message: "Use a physical iPad for USB diagnostics.")
+          }
+          probe = nil
+          probeSerial = nil
+          version = "Simulator fixture"
+        #else
+          if let connection {
+            probe = connection
+            probeSerial = serial
+            version = firmware ?? "Unknown"
+          } else {
+            guard let slot = try await USBSmartCardConnection.availableDevices().first else {
+              throw VowError(message: "Connect the USB security key.")
+            }
+            let opened = try await USBSmartCardConnection(slot: slot)
+            temporary = opened
+            let management = try await Management.Session.makeSession(connection: opened)
+            let device = try await management.getDeviceInfo()
+            let serial = device.serialNumber
+            version = "\(device.version)"
+            probeSerial = serial
+            probe = opened
+          }
+        #endif
+        let report: Diagnostic
+        do {
+          let info = try await inspectCredential(on: probe, serial: probeSerial)
+          report = Diagnostic(
+            format: "vow.hardware-key-diagnostic.v1", firmware: version,
+            probeState: "completed", detail: nil, transport: "USB smart card",
+            availableMethod: info.usesFIDO ? "Direct FIDO2" : "Smart-card signing",
+            requiresMacSetup: info.defaultPIN || info.requiresAdministratorSetup
+              || (!info.usesFIDO && info.publicKeyHex == nil),
+            enrolledMethod: expectedKey.map { $0.kind ?? "piv" },
+            decision: try policy(for: info, model: model))
+        } catch is CancellationError { throw CancellationError() } catch {
+          var fields: [String: Any] = [
+            "direct_fido": "failed", "piv": "unavailable", "piv_ready": false,
+            "native_configured": NativeSecurityKey.configuration(model: model).enabled,
+          ]
+          if let expectedKey { fields["enrolled_method"] = expectedKey.kind ?? "piv" }
+          let decision: HardwareKeyDecision = try model.call("hardware_key_policy", fields)
+          report = Diagnostic(
+            format: "vow.hardware-key-diagnostic.v1", firmware: version,
+            probeState: "failed", detail: String(OfflineFIDO.userMessage(error).prefix(400)),
+            transport: "USB smart card", availableMethod: "Check incomplete",
+            requiresMacSetup: false, enrolledMethod: expectedKey.map { $0.kind ?? "piv" },
+            decision: decision)
+        }
+        if let temporary { await temporary.close(error: nil) }
+        temporary = nil
+        try Task.checkCancellation()
+        guard epoch == interruptionEpoch, isConnected else {
+          throw VowError(message: "The key connection changed. Run the check again.")
+        }
+        return report
+      } catch {
+        if let temporary { await temporary.close(error: nil) }
+        throw error
       }
     }
     func registerCredential(
@@ -414,7 +670,13 @@
       let epoch = interruptionEpoch
       #if DEBUG && targetEnvironment(simulator)
         if isTestControlled {
-          guard pin == "654321" else {
+          let automatic = !info.usesFIDO && info.defaultPIN && pin.isEmpty
+          if automatic
+            && ProcessInfo.processInfo.arguments.contains("--ui-test-factory-pin-rejected")
+          {
+            throw PINEntryRequired()
+          }
+          guard automatic || pin == "654321" else {
             throw VowError(message: "Incorrect simulated PIV PIN. No hardware attempt was made.")
           }
           let key = try fixtureKey
@@ -477,37 +739,19 @@
       guard existing == info.publicKeyHex else {
         throw VowError(message: "The key’s signing credential changed. Check the key again.")
       }
-      let pinMetadata = try await piv.getPinMetadata()
-      guard !pinMetadata.isDefault else {
+      let management = try await piv.getManagementKeyMetadata()
+      let puk = try await piv.getPukMetadata()
+      guard !management.isDefault, !puk.isDefault else {
         throw VowError(
           message:
-            "Smart-card signing has not been set up on this key. Vow has not changed its PIN. Follow the Mac setup instructions."
+            "Ask your administrator to secure this key’s smart-card recovery and management settings on the Mac. Vow has not changed them."
         )
       }
-      var managementData: Data?
-      if existing == nil {
-        let management = try await piv.getManagementKeyMetadata()
-        guard management.isDefault, info.automaticCreation else {
-          throw VowError(
-            message:
-              "This key needs administrator setup before Vow can add a signing credential. No PIN or credential was changed."
-          )
-        }
-        managementData = try Data(hex: "010203040506070801020304050607080102030405060708")
-      }
-      try await verifyPIN(pin, session: piv)
-      if let managementData {
-        try await piv.authenticate(with: managementData)
-        // Recheck emptiness immediately before the only credential creation write.
-        guard try await credential(piv) == nil, interruptionEpoch == epoch, isConnected else {
-          throw VowError(
-            message:
-              "Slot 82 is no longer empty or the connection changed. No credential was overwritten."
-          )
-        }
-        try Task.checkCancellation()
-        _ = try await piv.generateKey(
-          in: .retired1, type: .ec(.secp256r1), pinPolicy: .always, touchPolicy: .always)
+      guard existing != nil else {
+        throw VowError(
+          message:
+            "Prepare smart-card signing on your Mac before connecting this key. No PIN or credential was changed."
+        )
       }
       guard let publicKey = try await credential(piv) else {
         throw VowError(message: "The Vow credential is unavailable.")
@@ -542,7 +786,14 @@
       }
       #if DEBUG && targetEnvironment(simulator)
         if isTestControlled {
-          guard pin == "654321" else { throw VowError(message: "Incorrect simulated PIV PIN.") }
+          if pin.isEmpty {
+            let usesFactory =
+              ProcessInfo.processInfo.arguments.contains("--ui-test-smartcard-factory-pin")
+              && expectedKey?.usesFIDO != true
+            guard usesFactory else { throw PINEntryRequired(retries: 3) }
+          } else if pin != "654321" {
+            throw VowError(message: "Incorrect simulated PIV PIN.")
+          }
           return try fixtureProof(message, fido: expectedKey?.usesFIDO == true)
         }
       #endif
@@ -565,11 +816,6 @@
       let piv = try await openPIV()
       guard try await credential(piv) == expectedKey.publicKeyHex else {
         throw VowError(message: "This key does not match the enrolled signing credential.")
-      }
-      let metadata = try await piv.getPinMetadata()
-      guard !metadata.isDefault else {
-        throw VowError(
-          message: "The enrolled key now uses a factory PIN. Contact your administrator.")
       }
       try await verifyPIN(pin, session: piv)
       let data = try await piv.sign(

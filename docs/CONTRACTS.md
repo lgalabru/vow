@@ -332,3 +332,127 @@ proof fields and verifies them again. Public exports retain the client JSON and
 authenticator data. Legacy v1 PIV and v2 direct CTAP records remain accepted; no
 session may replace or downgrade its enrolled factor. A changed build RP cannot
 silently migrate a v3 enrollment.
+
+## Offline member-address derivation
+
+`derive_member_address` accepts `public_key`, a lowercase hex encoding of a valid
+33-byte compressed P-256 public key. It returns `vow.member-address.v1` with
+`address`, `bump`, `bridge_program`, `device_public_key`,
+`signer_execution_scheme: external_account`, `registration_status: not_checked`
+and `network_binding: same_program_id_same_address_across_clusters`.
+
+The address is the pinned bridge PDA for seeds `passkey` and SHA-256 of the
+compressed device public key. It is distinct from the legacy execution-account
+PDA. This pure operation does not contact an RPC, initialize an account, establish
+cluster deployment compatibility or certify the key's hardware origin.
+
+Each prepared approval also binds a fresh 32-byte random `nonce` in its canonical
+signed message. The in-memory revision counter alone is not a replay boundary
+across app restarts. Failed completion consumes the pending attempt; prepare a new
+attempt and obtain both signatures again.
+
+## Hardware-key selection policy
+
+`hardware_key_policy` accepts `direct_fido` and `piv` capability states:
+`supported`, `unsupported`, `incompatible`, `failed` or `unavailable`.
+`piv_ready` and `native_configured` are required booleans. Optional
+`enrolled_method` is `fido2`, `piv` or `webauthn`. Unknown fields and contradictory
+PIV reports are rejected. The iPad sets `piv_ready` only after checking an existing
+hardware-generated P-256 credential, always-PIN and always-touch policies, a
+nonfactory PUK/management metadata. A factory PIN is permitted under the explicit
+automatic-PIN policy in `DESIGN.md`; it is not an independent knowledge factor.
+
+The `vow.hardware-key-policy.v1` response contains nullable `method`, `state`,
+`reason` and `writes_permitted: false`. States are `selected`, `setup_required`,
+`unsupported`, `blocked` or `pinned`. An enrolled method is never replaced.
+A probe failure cannot fall back. This pure policy authorizes no credential writes
+and does not authenticate hardware. Capability observations remain untrusted inputs.
+
+The native `vow.hardware-key-diagnostic.v1` export includes firmware, transport,
+probe state, nullable error detail, observed available method, setup requirement,
+current enrolled method and policy decision. It contains no PIN or private key.
+A failed probe reports `Check incomplete`; it does not assert lack of support.
+
+## Signing profiles, version 1
+
+- `create_ipad_profile`: `name`, enrolled `member_id`, and the public `enrollment`
+  proof object. Both keys are verified and the policy/address derived from it.
+- `begin_ledger_profile`: `name`, `member_id`, device-confirmed `address` and
+  `derivation_path`. Returns a canonical Vow enrollment `message` for the Ledger
+  envelope. A fresh nonce and five-minute pending challenge bind owner and identity.
+- `finish_ledger_profile`: `signature_hex`. Consumes the pending enrollment even
+  on failure; verifies the exact Ed25519 envelope and stores a local profile.
+- `cancel_profile_enrollment` clears the pending challenge.
+- `revoke_profile`: `id`. Blocks local profiled-quorum approvals; no chain update.
+- `import_signing_profile`: `profile`. Validates scope/proof and refuses conflicting
+  IDs or resurrection of a locally revoked record.
+- `restore_profile_catalog`: public `profiles` array for startup persistence. This
+  public prototype store is not an authorization or anti-rollback mechanism.
+
+Snapshots include `profiles`, with immutable `digest` and local-registration status,
+and a JSON-string `profile_catalog_export`. A shareable record uses
+`vow.prototype.signing-profile.v1` with a `profile` field and is accepted by `import`.
+A profiled quorum creation supplies `profiles: [{member_id, profile_id}]` instead
+of `member_ids`; Rust resolves exact versions/digests/addresses. Existing legacy
+quorums are not implicitly upgraded. Profile-enabled ceremony/proposal/approval
+records use version 5. A ceremony v4 with profiles or seats is rejected.
+
+`prepare_ledger_approval` takes a quorum-bound `profile_id` and returns `session`,
+`message`, and `message_hex`. `complete_ledger_approval` takes `session` and
+`signature_hex`. The proof is an off-chain rehearsal, not a transaction signature.
+It must verify against the exact Ledger envelope, current request and unexpired
+pending profile. Completion is one-shot. `complete` rejects Ledger pending state;
+`complete_ledger_approval` rejects P-256 pending state.
+
+`vow_ledger_v1` is bounded to 8 KB and runs outside the workspace mutex. On macOS it
+accepts explicit `connect`, `sign_enrollment` and `sign_approval` operations with a
+hardened Solana derivation path. Signing requires the expected account and exact
+operation domain before any hardware access. The result uses the ordinary owned
+JSON/free convention. It has no transaction-broadcast operation.
+
+Mobile helpers `ledger_mobile_commands`, `ledger_mobile_response`, `ledger_ble_frames`
+and `ledger_ble_decode` construct and validate bounded public-key/off-chain APDUs,
+response status/type, frame sequence/length and final signature. They expose no
+key-generation, PIN, recovery, management or arbitrary APDU operation. Desktop HID
+dependencies are absent from the iOS FFI graph.
+
+## Personal identities and local archive
+
+`PersonalIdentity` v1: `id`, `version`, `name`, `kind`, `address`, `public_key`,
+`derivation_path`, `proof`. It deliberately has no organization/member fields.
+`begin_personal_ledger` takes name/address/path and returns canonical `message`.
+`finish_personal_ledger` consumes the pending five-minute challenge and requires a
+verified Ledger off-chain signature. The domain is `vow.identity.enrollment.v1`,
+separate from organization profile enrollment and request approval. `create_personal_ipad`
+requires an existing verified dual-key `enrollment` record. Cancellation consumes a
+pending challenge. `restore_personal_identities` validates the entire bounded array
+and unique IDs before replacement; `import_personal_identity` merges one verified
+record and rejects a changed cryptographic identity under an existing ID.
+
+Share wrapper: `{ "format": "vow.personal-identity.v1", "identity": { ... } }`.
+Snapshots include `personal_identities` and `personal_identities_export`, independent
+of the selected organization. `register_personal_identity` takes an identity ID and
+an already-enrolled member ID in the active organization, creating an organization
+profile v2. It embeds the identity proof and pins its key and policy; ceremony v5
+and quorum-seat validation still apply. This local registration is not organization
+authorization or on-chain activation. Legacy profile v1 remains supported.
+
+Apple archive schema 1 stores two Rust-owned JSON strings, `personalIdentities` and
+`organizationProfiles`, bounded to 8 MiB. It never serializes a Swift presentation
+projection as a cryptographic record. It contains no private keys, PINs or active
+authorization state. Missing, unsupported and corrupt archives are distinct outcomes.
+
+## Full local reset
+
+`reset_all` returns an empty session: no organizations, projects, members, quorums,
+personal identities, registrations, requests, receipts, public signing keys, external-key
+bindings or pending operations. It does not reload the sample workspace. The existing
+`reset` action remains the Mac sample-session reset, which preserves profile catalogs.
+
+The Apple full-reset coordinator records explicit reset intent in nonsynchronizing
+Keychain storage, clears app data and exports, deletes the device identity record,
+clears cached key objects, calls `reset_all` and completes the reset marker. Startup
+finishes a pending authorized reset before loading identities. The public archive's
+optional `workspaceCleared` flag only controls workspace initialization; it has no
+key-deletion authority. Keychain deletion failures fail closed without silently
+creating a replacement. User confirmation precedes this operation.

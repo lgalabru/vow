@@ -17,3 +17,6 @@ base64 = "0.22.1"
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 solana-pubkey = { version = "2.4", features = ["curve25519"] }
 ciborium = "=0.2.2"
+
+ed25519-zebra = { version = "4", default-features = false }
+curve25519-dalek = "4"

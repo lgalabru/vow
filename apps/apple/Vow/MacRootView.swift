@@ -2,15 +2,16 @@
   import SwiftUI
 
   private enum MacSection: String, CaseIterable, Identifiable {
-    case overview, members, safeguards, review, requests, browser
+    case overview, members, safeguards, review, requests, browser, profiles
     var id: String { rawValue }
     var title: String {
       switch self {
-      case .overview: "Overview"
+      case .overview: "Home"
       case .members: "Members"
       case .safeguards: "Quorums"
       case .review: "Review ceremony"
       case .requests: "Requests"
+      case .profiles: "Profiles"
       case .browser: "Apps"
       }
     }
@@ -21,12 +22,14 @@
       case .safeguards: "checkmark.shield"
       case .review: "checklist"
       case .requests: "tray"
+      case .profiles: "person.crop.rectangle.stack"
       case .browser: "globe"
       }
     }
   }
   struct MacRootView: View {
     @Bindable var model: VowModel
+    @State private var creatingProfile = false
     @State private var selection: MacSection? = .overview
     @State private var addingMember = false
     @State private var settingUp: Member?
@@ -36,20 +39,18 @@
     @State private var filename = "Vow ceremony"
     @State private var resetting = false
     @State private var importingTransaction = false
+    @State private var ledgerApproval = false
     @State private var explanationTarget: ExplanationTarget?
     @State private var creatingWorkspace: WorkspaceCreation?
 
     var body: some View {
+      let selected = selection ?? .overview
       NavigationSplitView {
         List(selection: $selection) {
-          VStack(alignment: .leading, spacing: 12) {
-            IdentityMark(size: 42)
-            Text("Vow").font(.largeTitle.weight(.bold))
-            OrganizationSwitcher(
-              model: model, onCreate: { creatingWorkspace = .organization },
-              didSelect: { selection = .overview })
-          }.padding(.top, 16).padding(.bottom, 24).listRowSeparator(.hidden)
-          Section("Ceremony") {
+          WorkspaceIdentityHeader(
+            model: model,
+            onCreate: { creatingWorkspace = .organization }, didSelect: { selection = .overview })
+          Section("Organization") {
             ForEach([MacSection.overview, .members, .safeguards, .review]) { page in
               NavigationLink(value: page) { Label(page.title, systemImage: page.symbol) }
             }
@@ -58,6 +59,9 @@
             model: model, onCreate: { creatingWorkspace = .project },
             didSelect: { selection = .requests })
           Section("Workspace") {
+            NavigationLink(value: MacSection.profiles) {
+              Label("Profiles", systemImage: "person.crop.rectangle.stack")
+            }.accessibilityIdentifier("mac-profiles")
             NavigationLink(value: MacSection.requests) { Label("Requests", systemImage: "tray") }
             NavigationLink(value: MacSection.browser) { Label("Apps", systemImage: "globe") }
           }
@@ -72,59 +76,96 @@
           }.frame(maxWidth: .infinity, alignment: .leading).padding(20)
         }
       } detail: {
-        if let state = model.state {
-          if selection == .browser {
-            MacBrowserView(model: model).id("\(state.organizationId)/\(state.projectId)")
-          } else {
-            ScrollView {
-              VStack(alignment: .leading, spacing: 28) {
+        Group {
+          if let state = model.state {
+            if selected == .profiles {
+              ProfilesView(model: model).navigationTitle("Profiles")
+            } else if selected == .overview {
+              WorkspaceDashboard(
+                model: model, coordinator: true,
+                openRequests: { selection = .requests }, importRequest: { selection = .browser },
+                openProfiles: { selection = .profiles }, openMembers: { selection = .members },
+                openQuorums: { selection = .safeguards },
+                createProject: { creatingWorkspace = .project },
+                createOrganization: { creatingWorkspace = .organization })
+            } else if selected == .browser {
+              MacBrowserView(model: model).id("\(state.organizationId)/\(state.projectId)")
+            } else {
+              WorkspacePage {
                 if let error = model.error { ErrorNotice(message: error) }
                 switch selection ?? .overview {
-                case .overview: overview(state)
+                case .overview: EmptyView()
                 case .members: members(state)
                 case .safeguards: safeguards(state)
                 case .review: review(state)
                 case .requests: requests(state)
-                case .browser: EmptyView()
+                case .browser, .profiles: EmptyView()
                 }
-              }.frame(maxWidth: 860).padding(36).frame(maxWidth: .infinity)
+              }
+
             }
-            .background(Color(nsColor: .windowBackgroundColor))
-            .navigationTitle((selection ?? .overview).title)
-            .toolbar {
-              ToolbarItem(placement: .primaryAction) {
-                if selection == .requests {
-                  Button {
-                    if model.state?.proposal == nil { model.perform("sample") }
-                    exportRequest()
-                  } label: {
-                    Label("Export Request", systemImage: "square.and.arrow.up")
-                  }
-                } else {
-                  Button {
-                    export(state.ceremonyExport, name: "Vow ceremony")
-                  } label: {
-                    Label("Export Ceremony", systemImage: "square.and.arrow.up")
-                  }
+          } else {
+            ContentUnavailableView(
+              "Couldn't open Vow", systemImage: "exclamationmark.triangle",
+              description: Text(model.error ?? "Restart the application."))
+          }
+        }
+        .navigationTitle(selected.title)
+        .toolbar {
+          ToolbarItemGroup(placement: .primaryAction) {
+            if let state = model.state {
+              if selected == .requests, state.proposal != nil {
+                Button("Export Request", systemImage: "square.and.arrow.up", action: exportRequest)
+              }
+              if selected == .review {
+                Button("Export Ceremony", systemImage: "square.and.arrow.up") {
+                  export(state.ceremonyExport, name: "Vow ceremony")
                 }
               }
-              ToolbarItem(placement: .secondaryAction) {
-                Menu {
-                  Button("Import Transaction…") { importingTransaction = true }
-                  Button("Reset Session…", role: .destructive) { resetting = true }
-                } label: {
-                  Image(systemName: "ellipsis.circle")
+              if selected != .profiles {
+                Button("Import File", systemImage: "square.and.arrow.down") {
+                  importingTransaction = true
                 }
-                .help("More options")
               }
+              Menu {
+                if selected == .requests, state.awaitingApproval,
+                  state.quorum?.seats?.contains(where: { seat in
+                    state.profiles.contains {
+                      $0.id == seat.profileId && $0.kind == "ledger" && !$0.revoked
+                    }
+                  }) == true
+                {
+                  Button("Review with Ledger") { ledgerApproval = true }
+                }
+                Button("Reset Sample Session…", role: .destructive) { resetting = true }
+              } label: {
+                Label("More", systemImage: "ellipsis.circle")
+              }
+              .help("Workspace options")
             }
           }
-        } else {
-          ContentUnavailableView(
-            "Couldn't open Vow", systemImage: "exclamationmark.triangle",
-            description: Text(model.error ?? "Restart the application."))
         }
       }
+      #if DEBUG
+        .task {
+          guard ProcessInfo.processInfo.arguments.contains("--ui-test-design-review") else {
+            return
+          }
+          do {
+            try await Task.sleep(for: .seconds(1))
+            for width in [1000, 1400] {
+              MacDesignReview.resize(width: width)
+              for section in MacSection.allCases {
+                selection = section
+                try await Task.sleep(for: .milliseconds(500))
+                MacDesignReview.capture("\(section.rawValue)-\(width)")
+              }
+            }
+            selection = .requests
+            print("VOW_DESIGN_REVIEW_COMPLETE")
+          } catch { print("VOW_DESIGN_REVIEW_INTERRUPTED") }
+        }
+      #endif
       .onOpenURL { url in
         model.importFile(url)
         selection = .requests
@@ -138,7 +179,8 @@
         case .failure(let error): model.error = error.localizedDescription
         }
       }
-      .tint(.blue)
+      .tint(Color.accentColor)
+      .sheet(isPresented: $ledgerApproval) { LedgerApprovalView(model: model) }
       .sheet(item: $model.inspection) { inspection in
         TransactionInspectionView(model: model, inspection: inspection).frame(
           minWidth: 760, minHeight: 700)
@@ -158,6 +200,16 @@
         isPresented: $exporting, document: document, contentType: .json, defaultFilename: filename
       ) { result in
         if case .failure(let error) = result { model.error = error.localizedDescription }
+      }
+      .onAppear {
+        if !model.hasSigningProfiles && model.error == nil
+          && !ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--ui-test-") })
+        {
+          creatingProfile = true
+        }
+      }
+      .sheet(isPresented: $creatingProfile) {
+        ProfileCreationSheet(model: model, firstLaunch: true)
       }
       .confirmationDialog(
         "Reset prototype session?", isPresented: $resetting, titleVisibility: .visible
@@ -179,101 +231,7 @@
       if let text = model.state?.proposalExport { export(text, name: "Contributor grants") }
     }
     private func header(_ title: String, subtitle: String) -> some View {
-      VStack(alignment: .leading, spacing: 10) {
-        Text(model.state?.organization ?? "Organization").font(.subheadline.weight(.medium))
-          .foregroundStyle(
-            .secondary)
-        Text(title).font(.system(size: 32, weight: .bold)).fixedSize(
-          horizontal: false, vertical: true)
-        Text(subtitle).font(.body).foregroundStyle(.secondary).fixedSize(
-          horizontal: false, vertical: true)
-      }
-    }
-    private func overview(_ state: Snapshot) -> some View {
-      VStack(alignment: .leading, spacing: 28) {
-        header(
-          "Organization setup",
-          subtitle:
-            "Enroll members, register signing devices and configure quorum policies."
-        )
-        HStack(spacing: 14) {
-          statistic(
-            "Members", value: "\(state.members.count)",
-            detail: "\(state.readyCount) sample enrollments completed", symbol: "person.2")
-          statistic(
-            "Quorums", value: "\(state.quorums.count)",
-            detail: "Reusable approval policies",
-            symbol: "checkmark.shield")
-          statistic("Signing devices", value: "iPad", detail: "One for each member", symbol: "ipad")
-        }
-        SectionHeading(title: "Enrollment ceremony") {
-          Text(state.confirmed ? "Sample ceremony confirmed" : "In progress").font(.caption)
-            .foregroundStyle(.secondary)
-        }
-        Surface {
-          ceremonyStep(
-            "1", title: "Organization details", detail: state.organization, symbol: "building.2",
-            complete: true
-          ) { editingOrganization = true }
-          Divider().padding(.leading, 66)
-          ceremonyStep(
-            "2", title: "Member enrollment",
-            detail: "\(state.readyCount) of \(state.members.count) ready",
-            symbol: "person.badge.key",
-            complete: !state.members.isEmpty && state.readyCount == state.members.count
-          ) { selection = .members }
-          Divider().padding(.leading, 66)
-          ceremonyStep(
-            "3", title: "Compose project quorums",
-            detail: "\(state.quorums.count) reusable quorums",
-            symbol: "lock.shield", complete: !state.quorums.isEmpty
-          ) { selection = .safeguards }
-          Divider().padding(.leading, 66)
-          ceremonyStep(
-            "4", title: "Verify ceremony transcript",
-            detail: "Compare transcript fingerprints across signing devices",
-            symbol: "checklist", complete: state.confirmed
-          ) { selection = .review }
-        }
-        SectionHeading(title: "Members") {
-          Button("View All") { selection = .members }.buttonStyle(.link)
-        }
-        Surface {
-          ForEach(Array(state.members.enumerated()), id: \.element.id) { index, member in
-            memberRow(member)
-            if index < state.members.count - 1 { Divider().padding(.leading, 72) }
-          }
-        }
-      }
-    }
-    private func statistic(_ title: String, value: String, detail: String, symbol: String)
-      -> some View
-    {
-      Surface {
-        VStack(alignment: .leading, spacing: 12) {
-          Label(title, systemImage: symbol).font(.caption).foregroundStyle(.secondary)
-          Text(value).font(.system(size: 30, weight: .semibold, design: .rounded)).monospacedDigit()
-          Text(detail).font(.caption).foregroundStyle(.secondary)
-        }.frame(maxWidth: .infinity, alignment: .leading).padding(20)
-      }
-    }
-    private func ceremonyStep(
-      _ number: String, title: String, detail: String, symbol: String, complete: Bool,
-      action: @escaping () -> Void
-    ) -> some View {
-      Button(action: action) {
-        HStack(spacing: 16) {
-          Image(systemName: complete ? "checkmark.circle.fill" : symbol).font(.title3)
-            .foregroundStyle(complete ? Color.blue : .secondary).frame(width: 30)
-          VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.body.weight(.medium))
-            Text(detail).font(.caption).foregroundStyle(.secondary)
-          }
-          Spacer()
-          Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(
-            .tertiary)
-        }.padding(20).contentShape(Rectangle())
-      }.buttonStyle(.plain)
+      PageHeading(title: title, detail: subtitle)
     }
     private func memberRow(_ member: Member) -> some View {
       HStack(spacing: 14) {
@@ -294,7 +252,7 @@
     private func members(_ state: Snapshot) -> some View {
       VStack(alignment: .leading, spacing: 24) {
         header(
-          "Everyone gets their own key",
+          "Members",
           subtitle: "Set up each person’s identity and signing device in the same room.")
         SectionHeading(title: "\(state.members.count) members") {
           Button {
@@ -319,13 +277,16 @@
     private func safeguards(_ state: Snapshot) -> some View {
       VStack(alignment: .leading, spacing: 24) {
         header(
-          "The right people for each project",
+          "Quorums",
           subtitle:
             "Enroll once. Create a quorum from enrolled members, then reuse it wherever it fits.")
         HStack {
-          Text("Organization quorums").font(.title2.bold())
+          Text("\(state.quorums.count) \(state.quorums.count == 1 ? "quorum" : "quorums")").font(
+            .headline
+          ).foregroundStyle(.secondary)
           Spacer()
-          Button("New Project…", systemImage: "plus") { creatingWorkspace = .project }
+          Button("New Project…", systemImage: "plus") { creatingWorkspace = .project }.buttonStyle(
+            .bordered)
         }
         ForEach(state.quorums) { quorum in
           Surface {
@@ -347,7 +308,7 @@
         QuietNotice(
           title: "Enrollment is independent of projects",
           message:
-            "Each member completes a physical enrollment with the organization once. New projects reuse that enrollment. To choose different signers or a different threshold, create a new quorum; existing quorums stay unchanged."
+            "Members enroll once. Projects can reuse an existing quorum or select a new group and threshold."
         )
       }
     }
@@ -356,7 +317,7 @@
         header(
           state.confirmed ? "Sample ceremony complete" : "Ceremony verification",
           subtitle:
-            "Compare the organization enrollment roster. Project quorums are configured separately."
+            "Verify the member roster and compare the ceremony fingerprint."
         )
         Surface {
           DetailLine(title: "Organization", value: state.organization)
@@ -367,10 +328,15 @@
         }
         Surface { DigestView(digest: state.ceremonyDigest).padding(24) }
         if state.readyCount < state.members.count {
-          QuietNotice(
-            title: "Member enrollment incomplete",
-            message: "\(state.members.count - state.readyCount) member still needs a sample setup.")
-          Button("Review Members") { selection = .members }.buttonStyle(.borderedProminent)
+          AssistantCard {
+            HStack {
+              Label(
+                "Member enrollment incomplete",
+                systemImage: "person.crop.circle.badge.exclamationmark")
+              Spacer()
+              Button("Review Members") { selection = .members }.buttonStyle(.borderedProminent)
+            }
+          }
         } else if !state.confirmed {
           Button("Confirm Sample Ceremony") { model.perform("confirm") }.buttonStyle(
             .borderedProminent
@@ -378,71 +344,65 @@
           .controlSize(.large)
         } else {
           Label("Sample ceremony confirmed", systemImage: "checkmark.seal.fill").foregroundStyle(
-            .blue
+            Color.accentColor
           )
           .font(.headline)
           Button("Export Ceremony…") { export(state.ceremonyExport, name: "Vow ceremony") }
             .buttonStyle(.borderedProminent).controlSize(.large)
         }
-        QuietNotice(
-          title: "Prototype ceremony",
-          message:
-            "The exported transcript contains sample identities. It doesn’t establish a verified organization or create a multisig."
-        )
+        Text("Sample ceremony · Physical identity verification is unavailable.")
+          .font(.caption).foregroundStyle(.secondary)
       }
     }
     private func requests(_ state: Snapshot) -> some View {
       VStack(alignment: .leading, spacing: 24) {
-        header(
-          "Approval requests",
-          subtitle: "Prepare and export requests for offline review and approval.")
-        Label(
-          "\(state.projectName) · \(state.chain?.name ?? "Unknown network")", systemImage: "folder"
-        ).font(.subheadline.weight(.medium))
-          .foregroundStyle(.secondary)
-        if let quorum = state.quorum {
-          Label("\(quorum.name) · \(quorum.policyLabel)", systemImage: "person.2.badge.gearshape")
-            .foregroundStyle(.secondary)
-        }
+        header("Requests", subtitle: "Prepare a request, then export it for offline review.")
+        ProjectContextCard(state: state)
         if let proposal = state.proposal {
-          Surface {
-            VStack(alignment: .leading, spacing: 14) {
-              Label("Sample transfer", systemImage: "arrow.up.right").font(.subheadline)
-                .foregroundStyle(.secondary)
-              Text(proposal.title).font(.title2.weight(.semibold))
-              Text("\(proposal.displayAmount) \(proposal.asset)").font(
-                .system(size: 36, weight: .semibold, design: .rounded)
-              ).monospacedDigit()
-              Text("To \(proposal.recipientName)").foregroundStyle(.secondary)
-              Divider().padding(.vertical, 6)
+          AssistantCard {
+            HStack(alignment: .top, spacing: 20) {
+              VStack(alignment: .leading, spacing: 8) {
+                Text(proposal.title).font(.title3.weight(.semibold))
+                Text("To \(proposal.recipientName)").foregroundStyle(.secondary)
+              }
+              Spacer()
+              Text("\(proposal.displayAmount) \(proposal.asset)")
+                .font(.title2.weight(.semibold)).monospacedDigit()
+            }
+            Divider()
+            HStack {
               if let digest = state.proposalDigest {
                 Button("Explain Request", systemImage: "text.bubble") {
                   explanationTarget = ExplanationTarget(id: digest)
-                }.buttonStyle(.bordered)
+                }
+                .buttonStyle(.bordered)
               }
-              Button("Export for iPad…") { exportRequest() }.buttonStyle(.borderedProminent)
-                .controlSize(.large)
-            }.frame(maxWidth: .infinity, alignment: .leading).padding(28)
+              Spacer()
+              Button("Export for iPad…", action: exportRequest).buttonStyle(.borderedProminent)
+            }.controlSize(.large)
           }
         } else {
-          ContentUnavailableView {
-            Label("No pending requests", systemImage: "tray")
-          } description: {
-            Text("Create a sample request to validate the offline approval workflow.")
-          } actions: {
-            Button("Create Sample Request") { model.perform("sample") }.disabled(
-              state.quorum == nil
-            ).buttonStyle(
+          EmptyStateCard(
+            symbol: "tray", title: "No pending requests",
+            detail: "Connect an app to prepare a transaction, or import a transaction file."
+          ) {
+            Button("Prepare Request", systemImage: "globe") { selection = .browser }.buttonStyle(
               .borderedProminent)
-          }.frame(minHeight: 260)
+            Button("Import File") { importingTransaction = true }.buttonStyle(.bordered)
+          }
         }
-        QuietNotice(
-          title: "No transaction will be submitted",
-          message:
-            "Sample requests use a prototype-only format. The iPad can create a real cryptographic signature over the sample approval, but it cannot move funds."
-        )
-      }
+        HStack {
+          Text("Rehearsal mode · Transaction submission is unavailable.").font(.caption)
+            .foregroundStyle(.secondary)
+          Spacer(minLength: 12)
+          Menu("Sample request") {
+            Button("Create Sample Request") { model.perform("sample") }.disabled(
+              state.quorum == nil)
+          }.menuStyle(.borderlessButton).fixedSize()
+        }
+      }.frame(maxWidth: .infinity, alignment: .leading)
     }
+
   }
 
   private struct AddMemberSheet: View {
@@ -451,7 +411,7 @@
     @State private var name = ""
     var body: some View {
       VStack(alignment: .leading, spacing: 20) {
-        Image(systemName: "person.badge.plus").font(.largeTitle).foregroundStyle(.blue)
+        Image(systemName: "person.badge.plus").font(.largeTitle).foregroundStyle(.tint)
         Text("Member enrollment").font(.title.weight(.bold))
         Text("Each member requires identity verification and an enrolled signing device.")
           .foregroundStyle(

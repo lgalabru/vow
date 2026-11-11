@@ -268,3 +268,153 @@ General arbitrary-program signing, remote ceremony, production Passport ZK
 credentials, arbitrary downloadable decoder code, threshold Ed25519/DKG, and
 unmeasured handwriting-based identity claims are outside the initial pilot.
 Expand one boundary at a time with new threat analysis and acceptance tests.
+
+## Verification update (2026-11-10)
+
+- [x] Verify the owner's exported native offline approval with both P-256 keys.
+- [x] Derive the ExternalAccount member address in Rust with an independent PDA
+  vector and display pending activation in This iPad.
+- [x] Automatically request the native YubiKey proof after consent is ready;
+  preserve explicit device biometric authorization and invalidate stale proofs.
+- [x] Add crypto regression tests and a dedicated CI workflow. Reject missing
+  WebAuthn keys and reserved registration flags. Bind each approval attempt to a
+  fresh random nonce, including across app sessions.
+- [ ] Initialize the chosen bridge execution mode and verify deployed bytecode on
+  each supported cluster before real Squads voting or funded quorum membership.
+- [ ] Complete physical reboot, reinstall/recovery and failure-path testing. One
+  successful offline owner approval does not close these production gates.
+
+## Hardware-key exploration (2026-11-10)
+
+Design: [RFD 0004](docs/rfd/0004-offline-hardware-key-defaults.md).
+
+- [x] Define a Rust selection policy and typed capability outcomes. Prefer physically
+  tested direct USB CTAP for new offline enrollments; keep enrolled methods pinned.
+- [x] Expose a read-only iPad capability diagnostic outside active native requests,
+  with firmware, explicit failure outcomes and a public report export.
+- [ ] Record actual firmware and direct signing results on the owner's hardware.
+- [ ] Test direct USB PIN/touch signing on compatible hardware, including reboot,
+  prolonged offline operation and offline app updates.
+- [ ] Design the Mac PIV preparation assistant for older hardware. Explain its
+  separate PIN, preserve existing credentials and settle recovery-secret custody
+  before enabling any provisioning writes.
+- [ ] Simplify the common iPad flow to connect, PIN, touch, then device biometrics.
+  Display protocol and slot information only in technical details.
+- [x] Add method-selection/no-downgrade unit tests and native UI regressions for
+  default selection, diagnostic export and unprepared PIV state.
+- [ ] Add explicit migration and physical hardware interruption acceptance tests.
+- [x] Install the diagnostic/default-selection build on the owner's iPad. Preserve
+  its existing native registration; switching methods remains a separate step.
+
+## Signing profiles and Ledger exploration (2026-11-10)
+
+Design: [RFD 0005](docs/rfd/0005-signing-profiles-and-ledger.md). The USB key
+migration/provisioning exploration is deferred while this model is considered.
+
+- [ ] Add user-owned versioned signing profiles, organization registration of each
+  profile, and quorum seats referencing one exact profile per enrolled member.
+- [ ] Preserve the existing iPad identity as one profile without repeating the
+  physical ceremony or rotating keys. Adding another key still needs proof and
+  authorized member binding.
+- [ ] Reject duplicate people or signer addresses in a quorum, incompatible methods,
+  inactive/revoked registrations and stale profile versions. Bind the full profile
+  policy into the quorum digest and version imported/exported schemas.
+- [ ] Add profile management and per-member profile selection during quorum setup.
+- [ ] Prototype macOS USB Ledger support using pinned solana-keychain, with explicit
+  device address confirmation and exact-byte transaction signature verification.
+- [ ] Separate Ledger off-chain enrollment envelopes, real Solana transaction
+  signatures and P-256 local approvals in the Rust/FFI proof types and tests.
+- [ ] Validate actual Ledger/Solana app versions and real Squads approval display.
+  Investigate a native iPad transport separately; desktop HID is not iPad support.
+
+## Profiles / Ledger implementation status (2026-11-10)
+
+- [x] Rust profile catalog, proof verification, immutable quorum seat binding,
+  duplicate member/address checks, revocation and v5 public schemas.
+- [x] Native Profiles screens, public record sharing/import and per-member profile
+  picker when creating quorums. Preserve existing unprofiled rehearsal quorums.
+- [x] Register existing iPad enrollment without rotating the key or repeating its
+  factor setup. Add a separate first-run Ledger path.
+- [x] Pin published solana-keychain PR 358 for macOS USB; no sibling-path dependency.
+- [x] Prototype Nano X / Nano Gen5 / Flex iPad BLE with Rust APDUs, framing and signature
+  verification. Keep desktop HID out of the iOS graph.
+- [x] Separate Ledger and P-256 authorization and export explicit off-chain rehearsal
+  evidence. Add Rust and native UI regressions and macOS adapter CI.
+- [ ] Run physical Nano X, Nano Gen5 and Flex BLE/USB acceptance: pairing, address display,
+  Solana app versions, enrollment, cancellation, wrong device, timeout and reconnect.
+- [ ] Add authenticated organizational profile registration, rollback-resistant
+  revocation, authorized profile replacement and per-cluster on-chain activation.
+- [ ] Construct and verify real Squads approval transactions and validate Ledger
+  clear-signing coverage. Off-chain rehearsal evidence cannot substitute for votes.
+
+## Full-app UX and data redesign (2026-11-10)
+
+- [x] Shared native design primitives and written full-app rules in DESIGN_MEMORY.md.
+- [x] Compact Mac/iPad workspace chrome, common home/dashboard and project/network rows.
+- [x] Consistent accent, icon, surfaces and typography through profiles, review and preparation.
+- [x] Personal identity separated from organization ceremony registration; preserve v1 records.
+- [x] One assistant for first launch and Add Profile: name, method, hardware, public address.
+- [x] Reuse verified iPad enrollment without rotating keys; new Ledger personal-proof domain.
+- [x] Bounded BLE discovery, explicit retry and cancellation, app check and exact device errors.
+- [x] Versioned atomic local public-record archive; migrate the old public catalog.
+- [ ] Durable organization/project/policy and receipt repositories with verified restore.
+- [ ] Explicit opt-in iCloud maintenance and backup/restore UX; never back up signing capability.
+- [ ] Authenticated ceremony registrations, revocation epochs and rollback-resistant restore.
+- [ ] Physical-device acceptance of the redesigned Ledger and security-key flows.
+- [ ] Accessibility acceptance at largest Dynamic Type sizes and small multitasking windows.
+
+### Page alignment review
+
+- [x] One WorkspacePage column and margins across Mac/iPad content pages.
+- [x] Shared full-width empty-state and context cards; compact page headings.
+- [x] Mac Requests real preparation/import primary actions and secondary samples.
+- [x] Native trailing toolbar utilities with no centered overflow menu.
+- [x] iPad request/history/organization alignment and bounded device-settings width.
+- [x] Regression checks for home, projects, request approval, compact landscape and key diagnostics.
+
+### Signer scope and latest feedback (2026-11-11)
+
+- [x] Remove ceremony and member-administration UI from iPad; retain request policy context.
+- [x] Explicit per-request profile selection, reset on a new request, with policy/key checks.
+- [x] Freeze the chosen signing identity through the approval presentation.
+- [x] Stack full-width approval panels in portrait; retain split layout in landscape.
+- [x] Remove overlapping sidebar prototype caption and duplicate profile import button.
+- [x] Reset Everything with confirmation: delete device identity and all Vow data; preserve hardware-key PINs.
+- [ ] Physical online-install test for AS1004 domain association, followed by offline signing.
+
+### Settings cleanup and full reset (2026-11-11)
+
+- [x] Replace This iPad with minimal Settings; move key/address records into profile details.
+- [x] Put read-only hardware diagnostics in a dedicated sheet.
+- [x] Full reset clears organizations/projects, personal profiles, public records, preferences and exports.
+- [x] Delete device-only Keychain identity and registered-key references; clear cached keys across scenes.
+- [x] Recover interrupted resets using a private Keychain intent, never public backup metadata.
+- [x] Persist a blank workspace so sample organizations/projects do not reappear after reset.
+
+### YubiKey setup navigation fix (2026-11-11)
+
+- [x] Synchronize setup UI and monitor transport on entry, method changes and resume.
+- [x] Restore saved-registration detection on leaving setup; require real USB readiness for direct inspection.
+- [x] Explicit iPadOS setup offer for confirmed unprepared legacy USB keys when configured.
+- [x] UI regressions: native → Back → direct setup, native opt-in, successful native signing, direct preference and no fallback on failed probes.
+- [ ] Physical YubiKey verification on the updated iPad build.
+
+## Automatic PIV PIN handling (2026-11-11)
+
+- [x] Hide PIN input for prepared keys reporting the factory PIN.
+- [x] Inspect fresh metadata before automatic verification; preserve the final retry.
+- [x] Reveal existing-PIN input on rejection without automatically retrying.
+- [x] Preserve custom PINs, credential pinning and administrative readiness gates.
+- [x] Add standalone production-policy tests and onboarding regression coverage.
+- [x] Add explicit on-device PIV setup with private recovery journaling and no overwrite of existing keys.
+- [ ] Verify automatic handling on the owner's physical prepared key.
+
+## Remove the native-setup dead end (2026-11-11)
+
+- [x] Remove new-profile iPadOS compatibility options and the primary redirect.
+- [x] Ignore unfinished native registrations when choosing a new-profile adapter.
+- [x] Add explicit direct setup: verify existing PIN, journal secrets, secure factory administrative settings, generate only in an empty location.
+- [x] Preserve existing native enrollments and all customized PINs and credentials.
+- [x] Fault-test interrupted writes, failed journal persistence, occupied keys and final recovery retry.
+- [ ] Verify fresh-key provisioning with the owner's physical YubiKey.
+- [ ] Add a secure recovery export for app-managed PIV administrative secrets before production release.

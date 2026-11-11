@@ -172,6 +172,9 @@ struct TransactionInspectionView: View {
     NavigationStack {
       ScrollView {
         VStack(alignment: .leading, spacing: 24) {
+          #if os(iOS)
+            SigningProfilePicker(model: model)
+          #endif
           Text(inspection.instructions.first?.title ?? "Inspect transaction").font(
             .largeTitle.bold())
           Text("\(inspection.chain.name) · \(inspection.instructions.count) instruction(s)")

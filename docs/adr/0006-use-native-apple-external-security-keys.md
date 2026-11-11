@@ -1,6 +1,6 @@
 # ADR 0006: Prefer Apple's native external security-key API when configured
 
-Status: accepted (2026-11-10)
+Status: superseded by 0008
 
 ## Context
 

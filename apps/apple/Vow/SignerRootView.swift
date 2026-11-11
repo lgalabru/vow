@@ -6,15 +6,15 @@
   import Security
 
   private enum SignerSection: String, CaseIterable, Identifiable {
-    case projects, requests, history, organization, device
+    case projects, requests, history, profiles, device
     var id: String { rawValue }
     var title: String {
       switch self {
       case .projects: "Home"
       case .requests: "Requests"
       case .history: "History"
-      case .organization: "Organization"
-      case .device: "This iPad"
+      case .profiles: "Profiles"
+      case .device: "Settings"
       }
     }
     var symbol: String {
@@ -22,8 +22,8 @@
       case .projects: "house"
       case .requests: "tray"
       case .history: "clock"
-      case .organization: "person.2"
-      case .device: "ipad"
+      case .profiles: "person.crop.rectangle.stack"
+      case .device: "gearshape"
       }
     }
   }
@@ -32,10 +32,13 @@
     @State private var selection: SignerSection? = .projects
     @Environment(SecurityKeyMonitor.self) private var securityKey
     @State private var importing = false
+    @State private var enrollingDevice = false
     @State private var replayResult: ReplayOutput?
     @State private var replaying = false
     @State private var replayError: String?
-    @State private var approvalTarget: ExplanationTarget?
+    @State private var approvalTarget: SigningApprovalTarget?
+    @State private var confirmingReset = false
+    @State private var showingDiagnostics = false
     @State private var showingReceipt: Receipt?
     @State private var exportDocument = VowFile()
     @State private var exporting = false
@@ -46,16 +49,17 @@
         && model.inspection == nil
     }
 
+    private var showsRequestActions: Bool {
+      showsConnectionStatus && (selection ?? .requests) == .requests
+        && model.state?.awaitingApproval == true
+    }
+
     var body: some View {
       NavigationSplitView {
         List(selection: $selection) {
-          VStack(alignment: .leading, spacing: 14) {
-            IdentityMark(size: 48)
-            Text("Vow").font(.largeTitle.weight(.bold))
-            OrganizationSwitcher(model: model, didSelect: { selection = .projects })
-          }.padding(.vertical, 24)
-          Section {
-            ForEach(SignerSection.allCases) { page in
+          WorkspaceIdentityHeader(model: model, didSelect: { selection = .projects })
+          Section("Workspace") {
+            ForEach([SignerSection.projects, .requests, .history]) { page in
               NavigationLink(value: page) {
                 HStack {
                   Label(page.title, systemImage: page.symbol)
@@ -64,20 +68,18 @@
                     Text("1").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                   }
                 }
-              }
+              }.accessibilityIdentifier("signer-section-\(page.rawValue)")
+            }
+          }
+          Section("Personal") {
+            ForEach([SignerSection.profiles, .device]) { page in
+              NavigationLink(value: page) { Label(page.title, systemImage: page.symbol) }
+                .accessibilityIdentifier("signer-section-\(page.rawValue)")
             }
           }
         }.listStyle(.sidebar)
           .navigationSplitViewColumnWidth(min: 240, ideal: 275, max: 320)
-          .safeAreaInset(edge: .bottom, spacing: 0) {
-            VStack(alignment: .leading, spacing: 0) {
-              Text("Local prototype · No real funds").font(.caption2).foregroundStyle(
-                .secondary
-              )
-              .frame(maxWidth: .infinity, alignment: .leading).padding(24)
-              if showsConnectionStatus { Color.clear.frame(height: 56) }
-            }
-          }
+          .contentMargins(.bottom, showsConnectionStatus ? 80 : 24, for: .scrollContent)
       } detail: {
         NavigationStack {
           Group {
@@ -86,7 +88,9 @@
               case .projects: workspaceHome(state)
               case .requests: requestView(state)
               case .history: historyView(state)
-              case .organization: organizationView(state)
+              case .profiles:
+                ProfilesView(
+                  model: model, deviceEnrollment: keys.enrollmentPackage, deviceKeys: keys)
               case .device: deviceView
               }
             } else {
@@ -95,9 +99,10 @@
                 description: Text(model.error ?? "Restart the application."))
             }
           }
-          .safeAreaInset(edge: .bottom, spacing: 0) {
-            if showsConnectionStatus { Color.clear.frame(height: 56) }
-          }
+          .padding(.bottom, showsRequestActions ? 60 : 0)
+          .contentMargins(
+            .bottom, showsConnectionStatus && !showsRequestActions ? 60 : 0, for: .scrollContent
+          )
           .navigationTitle(
             (selection ?? .requests) == .requests
               ? (model.state?.projectName ?? "Requests") : (selection ?? .requests).title
@@ -105,7 +110,7 @@
           .navigationBarTitleDisplayMode(.inline)
           .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-              if (selection ?? .projects) != .projects {
+              if (selection ?? .projects) != .projects && selection != .device {
                 Button {
                   selection = .projects
                 } label: {
@@ -123,10 +128,12 @@
                 }
                 .accessibilityIdentifier("explainRequest")
               }
-              Button {
-                importing = true
-              } label: {
-                Label("Import File", systemImage: "square.and.arrow.down")
+              if (selection ?? .projects) != .profiles && selection != .device {
+                Button {
+                  importing = true
+                } label: {
+                  Label("Import File", systemImage: "square.and.arrow.down")
+                }
               }
             }
           }
@@ -136,7 +143,9 @@
         replayResult = nil
         replayError = nil
       }
-      .onChange(of: model.importedFileCount) { _, _ in selection = .requests }
+      .onChange(of: model.importedFileCount) { _, _ in
+        selection = model.lastImportedKind == "profile" ? .profiles : .requests
+      }
       .onAppear {
         if model.state?.proposal != nil { selection = .requests }
         #if DEBUG && targetEnvironment(simulator)
@@ -145,13 +154,29 @@
           }
         #endif
       }
-      .tint(.blue)
+      .tint(Color.accentColor)
       .overlay(alignment: .bottom) {
         if showsConnectionStatus {
-          NetworkStatusBar(
-            countdown: selection == .requests ? model.state?.proposal?.statusCountdown : nil
-          ).fixedSize(horizontal: false, vertical: true)
+          if (selection ?? .requests) == .requests,
+            let state = model.state, let proposal = state.proposal, state.awaitingApproval
+          {
+            HStack(spacing: 12) {
+              NetworkStatusBar(isInline: true).fixedSize(horizontal: true, vertical: false)
+              Spacer(minLength: 12)
+              if let countdown = proposal.statusCountdown {
+                StatusCountdownView(countdown: countdown).fixedSize()
+              }
+              requestActions(proposal)
+            }
+            .controlSize(.large)
+            .padding(.horizontal, 24).padding(.vertical, 8)
+          } else {
+            NetworkStatusBar().fixedSize(horizontal: false, vertical: true)
+          }
         }
+      }
+      .fullScreenCover(isPresented: $enrollingDevice) {
+        DeviceOnboardingView(keys: keys, model: model, onFinished: { enrollingDevice = false })
       }
       .fileImporter(
         isPresented: $importing, allowedContentTypes: [.vowTransaction, .json, .data, .plainText]
@@ -168,7 +193,12 @@
         TransactionInspectionView(model: model, inspection: inspection)
       }
       .fullScreenCover(item: $approvalTarget) { target in
-        ConsentSheet(model: model, keys: keys, digest: target.id)
+        if target.profile.kind == "ledger" {
+          LedgerApprovalView(
+            model: model, initialProfileID: model.registration(for: target.profile)?.id)
+        } else {
+          ConsentSheet(model: model, keys: keys, digest: target.id, profile: target.profile)
+        }
       }
       .fullScreenCover(item: $explanationTarget) { target in
         RequestExplanationSheet(model: model, digest: target.id)
@@ -183,94 +213,43 @@
         if case .failure(let error) = result { model.error = error.localizedDescription }
       }
     }
-    private func workspaceHome(_ state: Snapshot) -> some View {
-      ScrollView {
-        VStack(alignment: .leading, spacing: 32) {
-          if let error = model.error { ErrorNotice(message: error) }
-          VStack(alignment: .leading, spacing: 8) {
-            Text("Signing workspace").font(.largeTitle.bold())
-            Text("Select a project to review pending approval requests.").foregroundStyle(
-              .secondary)
-          }
-          VStack(alignment: .leading, spacing: 14) {
-            Text("Project actions").font(.title2.bold())
-            Surface {
-              VStack(spacing: 0) {
-                workspaceRow(
-                  "Requests", subtitle: state.projectName, symbol: "tray.fill", color: .blue
-                ) { selection = .requests }
-                Divider().padding(.leading, 76)
-                workspaceRow(
-                  "History", subtitle: "Approvals in this project", symbol: "clock.fill",
-                  color: .purple
-                ) { selection = .history }
-                Divider().padding(.leading, 76)
-                workspaceRow(
-                  "Organization", subtitle: state.organization, symbol: "person.2.fill",
-                  color: .orange
-                ) { selection = .organization }
-              }
-            }
-          }
-          VStack(alignment: .leading, spacing: 14) {
-            HStack {
-              Text("Projects").font(.title2.bold())
-              Spacer()
-              Text("\(state.projects.count)").font(.subheadline).foregroundStyle(.secondary)
-            }
-            Surface {
-              VStack(spacing: 0) {
-                ForEach(Array(state.projects.enumerated()), id: \.element.id) { index, project in
-                  if index > 0 { Divider().padding(.leading, 76) }
-                  Button {
-                    if model.perform("select_project", ["id": project.id]) { selection = .requests }
-                  } label: {
-                    HStack(spacing: 16) {
-                      Image(systemName: "rectangle.stack.fill").font(.title3)
-                        .foregroundStyle(.white).frame(width: 42, height: 42)
-                        .background(
-                          Color.accentColor,
-                          in: RoundedRectangle(cornerRadius: 11))
-                      VStack(alignment: .leading, spacing: 4) {
-                        Text(state.organization).font(.subheadline).foregroundStyle(.secondary)
-                        Text(project.name).font(.headline).foregroundStyle(.primary)
-                        if let quorum = state.quorums.first(where: { $0.id == project.quorumId }) {
-                          Text(
-                            "\(quorum.policyLabel) · \(project.chain == "mainnet" ? "Mainnet" : "Devnet")"
-                          ).font(.caption).foregroundStyle(.secondary)
-                        }
-                      }
-                      Spacer(minLength: 12)
-                      Image(systemName: "chevron.right").font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                    }.padding(20).frame(maxWidth: .infinity, alignment: .leading).contentShape(
-                      Rectangle())
-                  }.buttonStyle(.plain).accessibilityIdentifier("project-\(project.id)")
-                }
-              }
-            }
-            Text("Each project uses its own selected quorum of enrolled organization members.")
-              .font(.caption).foregroundStyle(.secondary)
-          }
-        }.padding(28).frame(maxWidth: 780).frame(maxWidth: .infinity)
-      }.background(Color(uiColor: .systemGroupedBackground))
+    private struct SigningApprovalTarget: Identifiable {
+      let id: String
+      let profile: SigningProfileChoice
     }
-    private func workspaceRow(
-      _ title: String, subtitle: String, symbol: String, color: Color, action: @escaping () -> Void
-    ) -> some View {
-      Button(action: action) {
-        HStack(spacing: 16) {
-          Image(systemName: symbol).font(.title3).foregroundStyle(.white)
-            .frame(width: 40, height: 40).background(color, in: RoundedRectangle(cornerRadius: 10))
-          VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.headline).foregroundStyle(.primary)
-            Text(subtitle).font(.caption).foregroundStyle(.secondary)
-          }
-          Spacer(minLength: 12)
-          Image(systemName: "chevron.right").font(.subheadline.weight(.semibold)).foregroundStyle(
-            .tertiary)
-        }.padding(20).contentShape(Rectangle())
-      }.buttonStyle(.plain)
+    private var signingChoices: [SigningProfileChoice] {
+      let choices = model.signingProfileChoices
+      #if DEBUG && targetEnvironment(simulator)
+        if choices.isEmpty && keys.isUITestCompleted {
+          return [
+            SigningProfileChoice(
+              id: "simulator-ipad", name: "Test iPad", kind: "ipad_security_key",
+              address: memberAddress?.address ?? keys.publicKeyHex, publicKey: keys.publicKeyHex)
+          ]
+        }
+      #endif
+      return choices
+    }
+    private var selectedSigningProfile: SigningProfileChoice? {
+      signingChoices.first { $0.id == model.selectedSigningProfileID }
+    }
+    private var profileSelectionIssue: String? {
+      guard let profile = selectedSigningProfile else { return nil }
+      if profile.kind == "ipad_security_key" && profile.publicKey != keys.publicKeyHex {
+        return "This profile belongs to another iPad. Choose a profile available on this device."
+      }
+      if model.state?.quorum?.seats?.isEmpty == false || profile.kind == "ledger" {
+        if model.registration(for: profile) == nil {
+          return "This profile is not permitted by this request’s signing policy."
+        }
+      }
+      return nil
+    }
+    private func workspaceHome(_ state: Snapshot) -> some View {
+      WorkspaceDashboard(
+        model: model,
+        openRequests: { selection = .requests }, importRequest: { importing = true },
+        openProfiles: { selection = .profiles })
     }
     private func runReplay() {
       guard !replaying else { return }
@@ -287,312 +266,258 @@
     private func requestView(_ state: Snapshot) -> some View {
       Group {
         if let proposal = state.proposal, state.awaitingApproval {
-          ScrollView {
-            VStack(alignment: .leading, spacing: 26) {
-              if let error = model.error { ErrorNotice(message: error) }
-              HStack {
-                Label("Sample request", systemImage: "circle.dotted").font(
-                  .subheadline.weight(.medium)
-                ).foregroundStyle(.secondary)
-                Spacer()
-                Text("1 of 1").font(.caption).foregroundStyle(.tertiary)
-              }
-              VStack(alignment: .leading, spacing: 10) {
-                Label(
-                  "\(state.projectName) · \(state.chain?.name ?? "Unknown network")",
-                  systemImage: "folder"
-                ).font(.subheadline).foregroundStyle(
-                  .secondary)
-                Text(proposal.title).font(.largeTitle.weight(.bold))
-                Text(proposal.note).font(.body).foregroundStyle(.secondary)
-              }
-              Surface {
-                VStack(spacing: 14) {
-                  Image(systemName: "arrow.up.right").font(.title2.weight(.medium))
-                    .foregroundStyle(.blue).frame(width: 58, height: 58)
-                    .background(.blue.opacity(0.08), in: Circle())
-                  Text("Transfer").font(.subheadline).foregroundStyle(.secondary)
-                  ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                      Text(proposal.displayAmount).font(
-                        .system(size: 48, weight: .semibold, design: .rounded)
-                      ).monospacedDigit()
-                      Text(proposal.asset).font(.title3.weight(.medium)).foregroundStyle(.secondary)
-                    }
-                    Text("\(proposal.displayAmount) \(proposal.asset)").font(
-                      .largeTitle.weight(.semibold))
+          WorkspacePage {
+            SigningProfilePicker(
+              model: model, choices: signingChoices, validationMessage: profileSelectionIssue)
+            if let error = model.error { ErrorNotice(message: error) }
+            HStack {
+              Label(
+                proposal.transactionIntent == nil ? "Sample request" : "Imported request",
+                systemImage: "doc.text"
+              ).font(
+                .subheadline.weight(.medium)
+              ).foregroundStyle(.secondary)
+              Spacer()
+              Text("1 of 1").font(.caption).foregroundStyle(.tertiary)
+            }
+            VStack(alignment: .leading, spacing: 10) {
+              Label(
+                "\(state.projectName) · \(state.chain?.name ?? "Unknown network")",
+                systemImage: "folder"
+              ).font(.subheadline).foregroundStyle(
+                .secondary)
+              Text(proposal.title).font(.largeTitle.weight(.bold))
+              Text(proposal.note).font(.body).foregroundStyle(.secondary)
+            }
+            Surface {
+              VStack(spacing: 14) {
+                Image(systemName: "arrow.up.right").font(.title2.weight(.medium))
+                  .foregroundStyle(.tint).frame(width: 58, height: 58)
+                  .background(Color.accentColor.opacity(0.08), in: Circle())
+                Text("Transfer").font(.subheadline).foregroundStyle(.secondary)
+                ViewThatFits(in: .horizontal) {
+                  HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(proposal.displayAmount).font(
+                      .system(size: 48, weight: .semibold, design: .rounded)
+                    ).monospacedDigit()
+                    Text(proposal.asset).font(.title3.weight(.medium)).foregroundStyle(.secondary)
                   }
-                  Text("to \(proposal.recipientName)").font(.body)
-                }.frame(maxWidth: .infinity).padding(.vertical, 32).padding(.horizontal, 20)
-                Divider().padding(.horizontal, 22)
+                  Text("\(proposal.displayAmount) \(proposal.asset)").font(
+                    .largeTitle.weight(.semibold))
+                }
+                Text("to \(proposal.recipientName)").font(.body)
+              }.frame(maxWidth: .infinity).padding(.vertical, 32).padding(.horizontal, 20)
+              Divider().padding(.horizontal, 22)
+              DetailLine(
+                title: "From",
+                value: state.decodedTransaction?.source
+                  ?? "\(state.organization) sample treasury",
+                symbol: "building.columns")
+              Divider().padding(.horizontal, 22)
+              DetailLine(
+                title: "Recipient", value: proposal.recipientName, symbol: "person.crop.circle")
+            }
+            VStack(alignment: .leading, spacing: 10) {
+              Text("Recipient address").font(.subheadline.weight(.semibold))
+              Text(proposal.recipient).font(.system(.callout, design: .monospaced))
+                .foregroundStyle(.secondary).textSelection(.enabled).fixedSize(
+                  horizontal: false, vertical: true)
+            }
+            if let quorum = state.quorum {
+              Surface {
                 DetailLine(
-                  title: "From",
-                  value: state.decodedTransaction?.source
-                    ?? "\(state.organization) sample treasury",
-                  symbol: "building.columns")
-                Divider().padding(.horizontal, 22)
-                DetailLine(
-                  title: "Recipient", value: proposal.recipientName, symbol: "person.crop.circle")
+                  title: "Quorum", value: quorum.name, symbol: "person.2.badge.gearshape")
+                DetailLine(title: "Required", value: quorum.policyLabel)
               }
-              VStack(alignment: .leading, spacing: 10) {
-                Text("Recipient address").font(.subheadline.weight(.semibold))
-                Text(proposal.recipient).font(.system(.callout, design: .monospaced))
-                  .foregroundStyle(.secondary).textSelection(.enabled).fixedSize(
-                    horizontal: false, vertical: true)
+            }
+            Surface {
+              DetailLine(
+                title: "Format", value: "Installed sample transfer",
+                symbol: "doc.text.magnifyingglass")
+              Divider().padding(.leading, 20)
+              DetailLine(
+                title: "Submission", value: "Not available in prototype", symbol: "network.slash")
+            }
+            DisclosureGroup("Package details") {
+              if let digest = state.proposalDigest {
+                DigestView(digest: digest).padding(.vertical, 12)
               }
-              if let quorum = state.quorum {
+              DetailLine(title: "Network", value: proposal.network)
+            }.font(.subheadline)
+            if let intent = proposal.transactionIntent {
+              if intent.reproduction != nil {
                 Surface {
-                  DetailLine(
-                    title: "Quorum", value: quorum.name, symbol: "person.2.badge.gearshape")
-                  DetailLine(title: "Required", value: quorum.policyLabel)
-                }
-              }
-              Surface {
-                DetailLine(
-                  title: "Format", value: "Installed sample transfer",
-                  symbol: "doc.text.magnifyingglass")
-                Divider().padding(.leading, 20)
-                DetailLine(
-                  title: "Submission", value: "Not available in prototype", symbol: "network.slash")
-              }
-              DisclosureGroup("Package details") {
-                if let digest = state.proposalDigest {
-                  DigestView(digest: digest).padding(.vertical, 12)
-                }
-                DetailLine(title: "Network", value: proposal.network)
-              }.font(.subheadline)
-              if let intent = proposal.transactionIntent {
-                if intent.reproduction != nil {
-                  Surface {
-                    VStack(alignment: .leading, spacing: 14) {
-                      Label("Reproduce this transfer", systemImage: "arrow.triangle.2.circlepath")
-                        .font(.headline)
-                      Text(
-                        "Runs locally against the bundled synthetic snapshot, without RPC access. Matching results do not prove current chain state or authorization."
-                      ).font(.caption).foregroundStyle(.secondary)
-                      Button(replaying ? "Replaying…" : "Replay on This iPad", action: runReplay)
-                        .buttonStyle(.bordered).disabled(replaying).accessibilityIdentifier(
-                          "replayTransaction")
-                      if let replayResult {
-                        Label("Replay matches", systemImage: "checkmark.circle.fill")
-                          .foregroundStyle(.green)
-                        Text("\(replayResult.computeUnits.formatted()) compute units").font(
-                          .caption
-                        ).foregroundStyle(.secondary)
-                        DisclosureGroup("Replay logs") {
-                          Text(replayResult.logs.joined(separator: "\n")).font(
-                            .system(.caption, design: .monospaced)
-                          ).textSelection(.enabled)
-                        }
+                  VStack(alignment: .leading, spacing: 14) {
+                    Label("Reproduce this transfer", systemImage: "arrow.triangle.2.circlepath")
+                      .font(.headline)
+                    Text(
+                      "Runs locally against the bundled synthetic snapshot, without RPC access. Matching results do not prove current chain state or authorization."
+                    ).font(.caption).foregroundStyle(.secondary)
+                    Button(replaying ? "Replaying…" : "Replay on This iPad", action: runReplay)
+                      .buttonStyle(.bordered).disabled(replaying).accessibilityIdentifier(
+                        "replayTransaction")
+                    if let replayResult {
+                      Label("Replay matches", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                      Text("\(replayResult.computeUnits.formatted()) compute units").font(
+                        .caption
+                      ).foregroundStyle(.secondary)
+                      DisclosureGroup("Replay logs") {
+                        Text(replayResult.logs.joined(separator: "\n")).font(
+                          .system(.caption, design: .monospaced)
+                        ).textSelection(.enabled)
                       }
-                      if let replayError { ErrorNotice(message: replayError) }
-                    }.padding(22)
-                  }
+                    }
+                    if let replayError { ErrorNotice(message: replayError) }
+                  }.padding(22)
                 }
-                if let idls = intent.idls, !idls.isEmpty {
-                  QuietNotice(
-                    title: "\(idls.count) IDL artifact(s) bundled",
-                    message:
-                      "IDL content is checked against its bundled metadata account and project network. RPC state and program semantics are not independently authenticated.",
-                    symbol: "doc.text")
-                }
+              }
+              if let idls = intent.idls, !idls.isEmpty {
                 QuietNotice(
-                  title: "Captured transaction · Rehearsal only",
+                  title: "\(idls.count) IDL artifact(s) bundled",
                   message:
-                    "The transaction bytes were decoded locally. Source origin is a claim supplied by the Mac: \(intent.sourceOrigin). No on-chain guard or vault is configured.",
-                  symbol: "doc.text.magnifyingglass")
-                if proposal.missingRequiredEvidence {
-                  ErrorNotice(
-                    message:
-                      "This file requires security-key or app-provenance evidence that this build cannot supply. Approval is blocked."
-                  )
-                }
+                    "IDL content is checked against its bundled metadata account and project network. RPC state and program semantics are not independently authenticated.",
+                  symbol: "doc.text")
               }
               QuietNotice(
-                title: "Prototype mode",
+                title: "Captured transaction · Rehearsal only",
                 message:
-                  "This is a sample, not a Solana transaction. Request approval can be exported, but it cannot move funds."
-              )
-            }.frame(maxWidth: 740).padding(32).frame(maxWidth: .infinity)
+                  "The transaction bytes were decoded locally. Source origin is a claim supplied by the Mac: \(intent.sourceOrigin). No on-chain guard or vault is configured.",
+                symbol: "doc.text.magnifyingglass")
+              if proposal.missingRequiredEvidence {
+                ErrorNotice(
+                  message:
+                    "This file requires security-key or app-provenance evidence that this build cannot supply. Approval is blocked."
+                )
+              }
+            }
+            QuietNotice(
+              title: "Prototype mode",
+              message:
+                "This is a sample, not a Solana transaction. Request approval can be exported, but it cannot move funds."
+            )
           }
-          .background(Color(uiColor: .systemGroupedBackground))
-          .safeAreaInset(edge: .bottom, spacing: 0) {
-            HStack(spacing: 16) {
-              Button("Decline", role: .destructive) { model.perform("decline") }.buttonStyle(
-                .bordered
-              ).controlSize(.large)
-              Button {
-                model.error = nil
-                if let digest = model.state?.proposalDigest {
-                  approvalTarget = ExplanationTarget(id: digest)
-                }
-              } label: {
-                Label("Review & Approve", systemImage: "signature").frame(maxWidth: .infinity)
-              }.buttonStyle(.borderedProminent).controlSize(.large).disabled(
-                proposal.missingRequiredEvidence)
-            }.frame(maxWidth: 740).padding(.horizontal, 24).padding(.vertical, 8)
-              .frame(maxWidth: .infinity)
-              .background(Color(uiColor: .systemGroupedBackground), ignoresSafeAreaEdges: .bottom)
-          }
+          .clipped()
         } else {
-          ContentUnavailableView {
-            Label(
-              state.declined ? "Request declined" : "No pending requests",
-              systemImage: state.declined ? "hand.raised" : "checkmark.circle")
-          } description: {
-            Text(
-              "Import a request for \(state.projectName), or load a sample request.")
-          } actions: {
-            Button("Import Request") { importing = true }.buttonStyle(.borderedProminent)
-            Button("Load Sample Request") { model.perform("sample") }.buttonStyle(.bordered)
-              .disabled(
-                state.quorum == nil)
-          }
-          .overlay(alignment: .bottom) {
-            if let error = model.error { ErrorNotice(message: error).padding(24) }
+          WorkspacePage {
+            PageHeading(title: "Requests", detail: "Review and approve requests for this project.")
+            ProjectContextCard(state: state)
+            EmptyStateCard(
+              symbol: state.declined ? "hand.raised" : "tray",
+              title: state.declined ? "Request declined" : "No pending requests",
+              detail: "Import a request file to begin an offline review."
+            ) {
+              Button("Import Request") { importing = true }.buttonStyle(.borderedProminent)
+              Button("Load Sample Request") { model.perform("sample") }.buttonStyle(.bordered)
+                .disabled(state.quorum == nil)
+            }
+            if let error = model.error { ErrorNotice(message: error) }
           }
         }
       }
+    }
+    private func requestActions(_ proposal: Proposal) -> some View {
+      HStack(spacing: 12) {
+        Button("Decline", role: .destructive) { model.perform("decline") }
+          .buttonStyle(.bordered)
+        Button {
+          model.error = nil
+          if let digest = model.state?.proposalDigest, let profile = selectedSigningProfile {
+            approvalTarget = SigningApprovalTarget(id: digest, profile: profile)
+          }
+        } label: {
+          Label("Review & Approve", systemImage: "signature")
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(
+          proposal.missingRequiredEvidence || selectedSigningProfile == nil
+            || profileSelectionIssue != nil)
+      }.fixedSize(horizontal: true, vertical: false)
     }
     private func historyView(_ state: Snapshot) -> some View {
-      Group {
+      WorkspacePage {
+        PageHeading(title: "History", detail: "Signed approvals for \(state.projectName).")
         if state.receipts.isEmpty {
-          ContentUnavailableView(
-            "Request approvals will appear here", systemImage: "clock",
-            description: Text(
-              "Signed approvals remain available for export during this session."))
+          EmptyStateCard(
+            symbol: "clock", title: "No approvals yet",
+            detail: "Approvals you sign remain available for export during this session."
+          ) { EmptyView() }
         } else {
-          List {
-            Section("This session") {
-              ForEach(state.receipts) { receipt in
-                Button {
-                  showingReceipt = receipt
-                } label: {
-                  HStack(spacing: 16) {
-                    Image(systemName: "checkmark.seal.fill").foregroundStyle(.blue).font(.title2)
-                    VStack(alignment: .leading, spacing: 6) {
-                      Text(receipt.title).foregroundStyle(.primary)
-                      Text("Sample approval · Available for export").font(.caption).foregroundStyle(
-                        .secondary)
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
-                  }.padding(.vertical, 12)
-                }
-              }
+          Surface {
+            ForEach(Array(state.receipts.enumerated()), id: \.element.id) { index, receipt in
+              if index > 0 { Divider().padding(.leading, 64) }
+              Button {
+                showingReceipt = receipt
+              } label: {
+                HStack(spacing: 16) {
+                  Image(systemName: "checkmark.seal").foregroundStyle(.tint).font(.title2).frame(
+                    width: 28)
+                  VStack(alignment: .leading, spacing: 5) {
+                    Text(receipt.title).font(.headline).foregroundStyle(.primary)
+                    Text("Signed approval · Available for export").font(.subheadline)
+                      .foregroundStyle(.secondary)
+                  }
+                  Spacer()
+                  Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+                }.padding(20).contentShape(Rectangle())
+              }.buttonStyle(.plain)
             }
-          }.listStyle(.insetGrouped)
+          }
         }
       }
     }
-    private func organizationView(_ state: Snapshot) -> some View {
-      Form {
-        Section {
-          HStack(spacing: 16) {
-            IdentityMark(size: 50)
-            VStack(alignment: .leading, spacing: 6) {
-              Text(state.organization).font(.title3.weight(.semibold))
-              Text("\(state.readyCount) of \(state.members.count) members enrolled")
-                .foregroundStyle(
-                  .secondary)
-            }
-          }.padding(.vertical, 10)
-        }
-        Section("Project quorum") {
-          if let quorum = state.quorum {
-            LabeledContent(quorum.name, value: quorum.policyLabel)
-            ForEach(state.members.filter { quorum.memberIds.contains($0.id) }) { member in
-              Label(member.name, systemImage: "person.crop.circle.badge.checkmark")
-            }
-          } else {
-            Text("Choose a project to see its quorum.").foregroundStyle(.secondary)
-          }
-        }
-        Section("Organization members") {
-          ForEach(state.members) { member in
-            HStack(spacing: 14) {
-              Avatar(member: member)
-              VStack(alignment: .leading, spacing: 4) {
-                Text(member.name)
-                Text(member.ready ? "Enrolled" : "Enrollment pending").font(.caption)
-                  .foregroundStyle(.secondary)
-              }
-            }.padding(.vertical, 5)
-          }
-        }
-        Section {
-          DigestView(digest: state.ceremonyDigest).padding(.vertical, 8)
-        } footer: {
-          Text("Sample identities. No passport verification or device pairing has taken place.")
-        }
-        Section { Button("Import Ceremony") { importing = true } }
-      }.formStyle(.grouped)
+    private struct MemberAddress: Decodable {
+      let address: String
+      let bridgeProgram: String
+    }
+    private var memberAddress: MemberAddress? {
+      try? model.call("derive_member_address", ["public_key": keys.publicKeyHex])
     }
     private var deviceView: some View {
       Form {
-        Section {
-          Label("Signing device", systemImage: "ipad").font(.headline).padding(.vertical, 8)
-          #if targetEnvironment(simulator)
-            LabeledContent("Key", value: "Simulator software key")
-          #else
-            LabeledContent("Key", value: "Secure Enclave · P-256")
-          #endif
-          LabeledContent("Storage", value: "Device-only Keychain")
-          Text(keys.publicKeyHex).font(.system(.caption, design: .monospaced))
-            .textSelection(.enabled).accessibilityIdentifier("devicePublicKey")
-        } footer: {
-          Text(
-            "The signing identity persists across app restarts. Workspace state and approval history remain temporary."
-          )
+        Section("App data") {
+          LabeledContent("Signing profiles", value: "\(model.signingProfileChoices.count)")
+          LabeledContent("Storage", value: "On this iPad")
         }
-        if let enrollment = keys.enrollmentPackage {
-          Section("Public enrollment record") {
-            LabeledContent("Multisig membership", value: "Not registered on-chain")
-            Text(
-              "Share this record with your administrator. It contains public key proofs, not a Solana wallet address or private key."
-            )
-            .font(.footnote).foregroundStyle(.secondary)
-            ShareLink(
-              item: EnrollmentRecordFile(package: enrollment),
-              preview: SharePreview("Vow device enrollment")
-            ) { Label("Share Enrollment Record", systemImage: "square.and.arrow.up") }
-            .accessibilityIdentifier("shareEnrollment")
-            Text(keys.fingerprint).font(.system(.caption, design: .monospaced)).textSelection(
-              .enabled)
-          }
+        Section("Support") {
+          Button("Diagnostics", systemImage: "stethoscope") { showingDiagnostics = true }
         }
-        Section("Approval") {
-          Label("Handwritten consent", systemImage: "signature")
-          Label("Device authentication", systemImage: "touchid")
+        Section("About") {
           LabeledContent(
-            "Registered YubiKey",
-            value: securityKey.isExpectedKeyConnected ? "Connected" : "Not detected")
+            "Vow",
+            value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+              ?? "Prototype")
         }
         Section {
-          Label("No network retrieval", systemImage: "network.slash")
-          LabeledContent("Formats", value: "Sample transfer")
-        } header: {
-          Text("Connection")
+          Button("Reset Everything", role: .destructive) { confirmingReset = true }
+            .accessibilityIdentifier("resetEverything")
         } footer: {
-          Text(
-            "This app makes no network requests. Device radios, system sharing and other apps are outside this prototype’s control."
-          )
-        }
-        Section {
-          QuietNotice(
-            title: "Designed for offline review",
-            message:
-              "Import a local transaction or Vow package, review its details and export an approval."
-          )
+          Text("Erase Vow’s data and this iPad’s signing identity.")
         }
       }.formStyle(.grouped)
+        .frame(maxWidth: VowDesign.pageWidth + VowDesign.pageInset * 2)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(VowDesign.canvas)
+        .sheet(isPresented: $showingDiagnostics) { SecurityKeyDiagnosticsView(model: model) }
+        .confirmationDialog(
+          "Reset everything?", isPresented: $confirmingReset, titleVisibility: .visible
+        ) {
+          Button("Erase Everything", role: .destructive) { model.resetEverything(device: keys) }
+            .accessibilityIdentifier("confirmResetEverything")
+        } message: {
+          Text(
+            "Permanently erase all Vow data, this iPad’s signing key and saved YubiKey registrations. Existing multisigs won’t be updated, and you may lose access. The YubiKey’s own PIN and credentials are unchanged. This cannot be undone."
+          )
+        }
     }
+
   }
 
   private struct ConsentSheet: View {
     @Bindable var model: VowModel
     let keys: DeviceKey
     let digest: String
+    let profile: SigningProfileChoice
     @Environment(NetworkStatus.self) private var network
     @Environment(SecurityKeyMonitor.self) private var securityKey
     @Environment(\.dismiss) private var dismiss
@@ -614,6 +539,19 @@
     @State private var consentTask: Task<Void, Never>?
     @State private var acknowledgingKey = false
     @State private var keyAnimationTask: Task<Void, Never>?
+    @State private var verifyingNative = false
+    @State private var nativeApproval: NativeApproval?
+    @State private var authorizationGeneration: UInt64 = 0
+    @State private var approvalTask: Task<Void, Never>?
+    private struct NativeApproval {
+      let prepared: SigningRequest
+      let message: Data
+      let proof: OfflineFIDO.Proof
+      let ink: Data
+      let networkEpoch: UInt64
+      let keyEpoch: UInt64
+    }
+    private var usesNativeKey: Bool { keys.registeredSecurityKey?.usesNative == true }
     private let steps = ["Review", "Authorize", "Export"]
 
     var body: some View {
@@ -633,7 +571,7 @@
                 }
                 if step == 2, let receipt {
                   Image(systemName: "checkmark.seal.fill").font(.system(size: 48)).foregroundStyle(
-                    .blue
+                    Color.accentColor
                   ).accessibilityHidden(true)
                   Text("Approval created").font(.largeTitle.bold())
                   Text("Export the signed approval for collection and verification.")
@@ -652,6 +590,9 @@
                     title: "Prototype approval", message: "On-chain execution is unavailable.")
                 } else {
                   Text("Review request").font(.largeTitle.bold())
+                  Label(
+                    profile.name + " · " + profile.method.title, systemImage: profile.method.symbol
+                  ).font(.subheadline).foregroundStyle(.secondary)
                   Text("Verify the amount, destination, network and quorum before authorization.")
                     .foregroundStyle(.secondary)
                   if let proposal = model.state?.proposal {
@@ -721,11 +662,12 @@
       .onDisappear {
         authorizationPIN = ""
         showingPIN = false
-        consentTask?.cancel()
+        invalidateConsent()
         keyAnimationTask?.cancel()
       }
       .onChange(of: securityKey.interruptionEpoch) { _, _ in
         guard step < 2 else { return }
+        let wasSigning = busy && !verifyingNative
         authorizationPIN = ""
         showingPIN = false
         keyAnimationTask?.cancel()
@@ -738,7 +680,7 @@
         }
         invalidateConsent()
         model.perform("cancel")
-        if busy {
+        if wasSigning {
           interrupted = true
           error = "The YubiKey connection changed. Close this approval and review it again."
         } else if securityKey.isExpectedKeyConnected {
@@ -761,10 +703,16 @@
     }
     private var authorizationLayout: some View {
       GeometryReader { geometry in
+        let stacked = geometry.size.height > geometry.size.width
         let compact = geometry.size.height < 440
+        let layout =
+          stacked
+          ? AnyLayout(VStackLayout(alignment: .leading, spacing: 20))
+          : AnyLayout(HStackLayout(alignment: .top, spacing: 20))
         let inset: CGFloat = compact ? 20 : 24
+        let contentWidth = max(0, geometry.size.width - inset * 2)
         let leftWidth = min(320, (geometry.size.width - inset * 2 - 41) * 0.38)
-        HStack(alignment: .top, spacing: 20) {
+        layout {
           VStack(alignment: .leading, spacing: compact ? 10 : 18) {
             if let state = model.state {
               VStack(alignment: .leading, spacing: 4) {
@@ -777,6 +725,7 @@
               }
               if let proposal = state.proposal {
                 Text(proposal.title).font(.headline).fixedSize(horizontal: false, vertical: true)
+                  .accessibilityIdentifier("authorizationRequestTitle")
                 Text("\(proposal.displayAmount) \(proposal.asset)")
                   .font(compact ? .title3.weight(.semibold) : .title2.weight(.semibold))
                   .monospacedDigit()
@@ -802,17 +751,22 @@
                 .fixedSize(horizontal: false, vertical: true).accessibilityIdentifier(
                   "authorizationDigest")
             }
-            Spacer(minLength: 0)
+            if !stacked { Spacer(minLength: 0) }
             Text("Prototype approval · On-chain execution unavailable")
               .font(.caption2).foregroundStyle(.secondary).fixedSize(
                 horizontal: false, vertical: true)
-          }.frame(width: leftWidth, alignment: .leading).frame(maxHeight: .infinity)
+          }.frame(width: stacked ? contentWidth : leftWidth, alignment: .leading)
+            .frame(
+              maxWidth: stacked ? .infinity : nil, maxHeight: stacked ? nil : .infinity,
+              alignment: .leading
+            )
             .accessibilityElement(children: .contain).accessibilityLabel("Request details")
             .accessibilityIdentifier("authorizationRequestPanel")
           Divider()
           VStack(alignment: .leading, spacing: compact ? 10 : 14) {
             HStack {
-              Text("Signature").font(.headline)
+              Text("Signature").font(.headline).accessibilityIdentifier(
+                "authorizationSignatureTitle")
               Spacer()
               Button("Clear") {
                 invalidateConsent()
@@ -866,9 +820,21 @@
                 }
               }.font(.subheadline).foregroundStyle(.secondary).accessibilityIdentifier(
                 "consentReadiness")
-              if securityKey.isExpectedKeyConnected {
-                Label("YubiKey connected", systemImage: "key.horizontal.fill")
-                  .foregroundStyle(.green)
+              if verifyingNative {
+                Label {
+                  Text("Verify on your YubiKey…")
+                } icon: {
+                  ProgressView().controlSize(.small)
+                }
+                .foregroundStyle(.secondary)
+              } else if securityKey.isExpectedKeyConnected {
+                Label(
+                  usesNativeKey
+                    ? (nativeApproval == nil ? "YubiKey detected" : "YubiKey verified")
+                    : "YubiKey connected",
+                  systemImage: "key.horizontal.fill"
+                ).foregroundStyle(
+                  usesNativeKey && nativeApproval == nil ? Color.secondary : Color.green)
               }
               #if targetEnvironment(simulator)
                 Label("Simulator signing key", systemImage: "desktopcomputer")
@@ -891,7 +857,8 @@
               )
               .accessibilityIdentifier("authorizationError")
             }
-          }.frame(maxWidth: .infinity, maxHeight: .infinity)
+          }.frame(width: stacked ? contentWidth : nil)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .accessibilityElement(children: .contain).accessibilityLabel(
               "Signature and verification"
             )
@@ -943,7 +910,13 @@
           Button(action: requestAuthorization) {
             HStack {
               if busy { ProgressView().tint(.white) }
-              Label(busy ? "Authorizing…" : "Authorize", systemImage: "lock.shield")
+              Label(
+                verifyingNative
+                  ? "Verifying…"
+                  : busy
+                    ? "Authorizing…"
+                    : usesNativeKey && nativeApproval == nil ? "Verify YubiKey" : "Authorize",
+                systemImage: verifyingNative ? "key.horizontal" : "lock.shield")
             }
           }.buttonStyle(.borderedProminent).disabled(
             busy || interrupted || penDown || checkedInk == nil
@@ -955,6 +928,14 @@
         .padding(.horizontal, 16).padding(.vertical, 8).frame(maxWidth: .infinity)
     }
     private func invalidateConsent() {
+      let hadPending = nativeApproval != nil || approvalTask != nil
+      authorizationGeneration &+= 1
+      approvalTask?.cancel()
+      approvalTask = nil
+      nativeApproval = nil
+      verifyingNative = false
+      busy = false
+      if hadPending && step < 2 { model.perform("cancel") }
       consentTask?.cancel()
       consentGeneration &+= 1
       checkedInk = nil
@@ -985,6 +966,8 @@
           checkedInk = ink
           checkingConsent = false
           error = nil
+          consentTask = nil
+          verifyNativeWhenReady()
         } catch is CancellationError {
           // A newer stroke supersedes this check.
         } catch {
@@ -1000,28 +983,45 @@
       model.perform("cancel")
       dismiss()
     }
+    private func verifyNativeWhenReady() {
+      guard usesNativeKey, nativeApproval == nil, !busy,
+        securityKey.isExpectedKeyConnected, checkedInk != nil
+      else { return }
+      approve(pin: "", verifyOnly: true)
+    }
     private func requestAuthorization() {
-      if keys.registeredSecurityKey?.usesNative == true {
-        approve(pin: "")
+      if usesNativeKey {
+        approve(pin: "", verifyOnly: nativeApproval == nil)
       } else if keys.isUITestCompleted {
         approve(pin: "654321")
-      } else {
+      } else if keys.registeredSecurityKey?.usesFIDO == true {
         showingPIN = true
+      } else {
+        // Inspect PIN metadata before asking. A configured PIN is never guessed.
+        approve(pin: "")
       }
     }
-    private func approve(pin: String) {
+    private func approve(pin: String, verifyOnly: Bool = false) {
       guard step == 1, network.isOffline, securityKey.isExpectedKeyConnected, !penDown,
         let ink = checkedInk,
         ink == drawing.dataRepresentation(), !busy, !interrupted,
         model.state?.proposalDigest == digest
       else { return }
       busy = true
+      verifyingNative = verifyOnly
       error = nil
       consentTask?.cancel()
       let authorizationEpoch = network.interruptionEpoch
       let securityKeyEpoch = securityKey.interruptionEpoch
-      Task { @MainActor in
-        defer { busy = false }
+      let attempt = authorizationGeneration
+      approvalTask = Task { @MainActor in
+        defer {
+          if attempt == authorizationGeneration {
+            busy = false
+            verifyingNative = false
+            approvalTask = nil
+          }
+        }
         do {
           guard network.isOffline, network.interruptionEpoch == authorizationEpoch else {
             throw VowError(message: "Disconnect and review this request again.")
@@ -1031,41 +1031,69 @@
           else {
             throw VowError(message: "Review this request again while offline.")
           }
-          let publicKey = try keys.publicKey()
-          var registration: [String: Any] = [
-            "public_key": publicKey.hexString, "source": keys.source,
-          ]
-          if let registered = keys.registeredSecurityKey {
-            registration["local_security_key"] = registered.publicKeyHex
-            if registered.usesNative {
-              registration["local_security_key_kind"] = "webauthn"
-              registration["local_credential_id"] = registered.credentialIDHex
-            } else if registered.usesFIDO {
-              registration["local_security_key_kind"] = "fido2"
-              registration["local_credential_id"] = registered.credentialIDHex
+          try Task.checkCancellation()
+          guard attempt == authorizationGeneration else { throw CancellationError() }
+          let prepared: SigningRequest
+          let message: Data
+          let securitySignature: OfflineFIDO.Proof
+          if !verifyOnly, let cached = nativeApproval, usesNativeKey {
+            guard cached.ink == ink, cached.networkEpoch == authorizationEpoch,
+              cached.keyEpoch == securityKeyEpoch
+            else { throw VowError(message: "Verify this request with the security key again.") }
+            prepared = cached.prepared
+            message = cached.message
+            securitySignature = cached.proof
+          } else {
+            let publicKey = try keys.publicKey()
+            var registration: [String: Any] = [
+              "public_key": publicKey.hexString, "source": keys.source,
+            ]
+            if let registered = keys.registeredSecurityKey {
+              registration["local_security_key"] = registered.publicKeyHex
+              if registered.usesNative {
+                registration["local_security_key_kind"] = "webauthn"
+                registration["local_credential_id"] = registered.credentialIDHex
+              } else if registered.usesFIDO {
+                registration["local_security_key_kind"] = "fido2"
+                registration["local_credential_id"] = registered.credentialIDHex
+              }
+            }
+            let _: Snapshot = try model.call("register_key", registration)
+            guard network.isOffline, network.interruptionEpoch == authorizationEpoch,
+              model.state?.proposalDigest == digest, !interrupted
+            else {
+              throw VowError(message: "Review this request again.")
+            }
+            prepared = try model.call("prepare", ["ink": ink.hexString])
+            message = try Data(hex: prepared.messageHex)
+            if let registered = keys.registeredSecurityKey, registered.usesNative {
+              securitySignature = try await NativeSecurityKey.sign(
+                message: message, key: registered, model: model)
+            } else {
+              securitySignature = try await securityKey.signApproval(
+                message, pin: pin, epoch: securityKeyEpoch)
             }
           }
-          let _: Snapshot = try model.call("register_key", registration)
-          guard network.isOffline, network.interruptionEpoch == authorizationEpoch,
-            model.state?.proposalDigest == digest, !interrupted
-          else {
-            throw VowError(message: "Review this request again.")
-          }
-          let prepared: SigningRequest = try model.call("prepare", ["ink": ink.hexString])
-          let message = try Data(hex: prepared.messageHex)
-          let securitySignature: OfflineFIDO.Proof
-          if let registered = keys.registeredSecurityKey, registered.usesNative {
-            securitySignature = try await NativeSecurityKey.sign(
-              message: message, key: registered, model: model)
-          } else {
-            securitySignature = try await securityKey.signApproval(
-              message, pin: pin, epoch: securityKeyEpoch)
+          try Task.checkCancellation()
+          guard attempt == authorizationGeneration, checkedInk == ink,
+            ink == drawing.dataRepresentation(), step == 1,
+            network.isOffline, network.interruptionEpoch == authorizationEpoch,
+            securityKey.interruptionEpoch == securityKeyEpoch, !interrupted
+          else { throw CancellationError() }
+          if verifyOnly {
+            nativeApproval = NativeApproval(
+              prepared: prepared, message: message,
+              proof: securitySignature, ink: ink, networkEpoch: authorizationEpoch,
+              keyEpoch: securityKeyEpoch)
+            return
           }
           guard network.isOffline, network.interruptionEpoch == authorizationEpoch, !interrupted
           else {
             throw VowError(message: "The connection changed. Review this approval again.")
           }
           let signature = try await keys.sign(message)
+          try Task.checkCancellation()
+          guard attempt == authorizationGeneration else { throw CancellationError() }
           try await securityKey.confirmPresence(epoch: securityKeyEpoch)
           guard network.isOffline, network.interruptionEpoch == authorizationEpoch, !interrupted
           else {
@@ -1093,7 +1121,22 @@
             "Vow-approval-\(UUID().uuidString).json")
           try Data(result.package.utf8).write(to: url, options: .atomic)
           fileURL = url
+        } catch is CancellationError {
+          if attempt == authorizationGeneration {
+            nativeApproval = nil
+            model.perform("cancel")
+          }
+        } catch is SecurityKeyMonitor.PINEntryRequired {
+          guard attempt == authorizationGeneration, !interrupted,
+            network.interruptionEpoch == authorizationEpoch,
+            securityKey.interruptionEpoch == securityKeyEpoch
+          else { return }
+          model.perform("cancel")
+          authorizationPIN = ""
+          showingPIN = true
         } catch {
+          guard attempt == authorizationGeneration else { return }
+          nativeApproval = nil
           // A discarded task must not cancel a newer approval after reconnection.
           if network.interruptionEpoch == authorizationEpoch
             && securityKey.interruptionEpoch == securityKeyEpoch
@@ -1165,7 +1208,7 @@
         VStack(spacing: 24) {
           Spacer()
           Image(systemName: "checkmark.seal.fill").font(.system(size: 64, weight: .light))
-            .foregroundStyle(.blue)
+            .foregroundStyle(.tint)
           VStack(spacing: 12) {
             Text("Approval created").font(.largeTitle.weight(.bold))
             Text("Export the signed approval for collection and verification.").foregroundStyle(

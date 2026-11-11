@@ -21,11 +21,9 @@ struct VowFile: FileDocument {
 struct IdentityMark: View {
   var size: CGFloat = 44
   var body: some View {
-    Image(systemName: "person.2.badge.key.fill")
-      .font(.system(size: size * 0.48, weight: .medium))
-      .foregroundStyle(.blue)
+    Image("VowMark").resizable().scaledToFit()
       .frame(width: size, height: size)
-      .background(.blue.opacity(0.09), in: RoundedRectangle(cornerRadius: size * 0.26))
+      .clipShape(RoundedRectangle(cornerRadius: size * 0.24))
       .accessibilityHidden(true)
   }
 }
@@ -54,6 +52,7 @@ struct Surface<Content: View>: View {
   @ViewBuilder var content: Content
   var body: some View {
     VStack(spacing: 0) { content }
+      .frame(maxWidth: .infinity, alignment: .leading)
       .background(.background, in: RoundedRectangle(cornerRadius: 18))
       .overlay {
         RoundedRectangle(cornerRadius: 18).strokeBorder(.secondary.opacity(0.12), lineWidth: 0.5)
