@@ -1,34 +1,51 @@
-# Vow
+<div align="center">
+  <img alt="Vow" src="apps/web/public/vow-glyph.png" width="200">
+</div>
 
-The public website is built in [apps/web](apps/web/README.md) and deploys to
-`https://vow.scarce.sh`. Run `just web-dev` to work on it locally.
+<p align="center">
+  <img alt="Status: experimental" src="https://img.shields.io/badge/status-experimental-orange">
+  <img alt="Core: Rust" src="https://img.shields.io/badge/core-Rust-black">
+  <img alt="Apps: SwiftUI" src="https://img.shields.io/badge/apps-SwiftUI-black">
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green"></a>
+</p>
 
-Vow is a proposed ceremony coordinator for Mac and an offline approval app for
-iPad. Teams enroll members in person, inspect multisig actions on separate
-devices, and export approvals that can be verified before execution.
+**Vow helps Solana teams prepare transactions on a Mac and approve them on an offline iPad.**
+The Mac captures transaction requests, inspects their instructions and exports a
+`.vow` review file. Each signer opens it on their iPad, chooses a signing profile,
+reviews the request and returns an approval. Portable verification runs in Rust;
+SwiftUI supplies the native apps and hardware adapters.
 
-Status: native prototypes and feasibility work, 2026-11-09. A
-[P-256 compatibility spike](spikes/p256/README.md) exercises Apple signing against
-the existing bridge in LiteSVM. The native apps rehearse ceremonies and approvals; no production app or on-chain adapter exists here.
-Rust owns portable logic; Swift supplies Apple UI and platform adapters through FFI.
-Solana Foundation distribution is
-a proposed distribution arrangement, not an established publisher relationship.
+[Website](https://vow.scarce.sh) · [Design](docs/DESIGN.md) ·
+[Security](docs/SECURITY.md) · [Implementation plan](plan.md)
 
-Start with the approval use case in [docs/DESIGN.md](docs/DESIGN.md), then read:
+> [!WARNING]
+> **Experimental and unaudited. Do not use Vow to secure real funds.**
+> The apps produce prototype approval evidence, not executable Squads votes.
+> Replay currently uses synthetic state. Production enforcement, authenticated
+> chain state, recovery and independent security review remain unfinished.
 
-- [Security and soundness](docs/SECURITY.md)
-- [Proposed package contracts](docs/CONTRACTS.md)
-- [Implementation plan and acceptance gates](plan.md)
-- [Platform evidence and research](docs/RESEARCH.md)
-- [Open design choices](docs/rfd/0001-signing-and-enforcement.md)
+## 🧭 What works
 
-Secure Enclave signing uses P-256. The Squads adapter remains a production gate;
-registration compatibility does not yet prove delayed voting and execution.
+| Area | What it does | Status |
+| --- | --- | --- |
+| 🖥️ **Prepare** | A Mac browser captures unsigned Solana requests into a native review and export flow. | Limited SOL-transfer preview; other supported layouts can be inspected |
+| 📦 **Transfer** | `.vow` files carry transaction bytes, review context and optional replay evidence. Plain transaction dumps are accepted too. | Implemented |
+| 🔎 **Review** | Rust decodes instructions, binds network context and checks imported evidence. Unknown instructions and unresolved lookup tables block signing. | Limited installed decoders |
+| 🧪 **Reproduce** | Embedded Surfpool exports replay fixtures; LiteSVM independently reproduces supported results. | Synthetic state, not authenticated chain state |
+| ✍️ **Approve** | Handwritten consent, YubiKey verification and iPad authentication protect a Secure Enclave P-256 approval. Ledger profiles use the device's Solana account. | Prototype signatures and verification; physical-device acceptance ongoing |
+| 👤 **Profiles** | Personal signing identities are separate from organization membership and project quorum seats. | Local persistence; iCloud backup is not implemented |
+| 👥 **Coordinate** | The Mac manages organizations, members, projects and reusable quorums. | Ceremony rehearsal; passport verification and pairing are unfinished |
+| ⛓️ **Execute** | Bind approvals to an enforceable Squads transaction and required attestations. | Compatibility spike exists; production adapter and guard are unfinished |
 
-## Run the native prototypes
+The [design](docs/DESIGN.md) describes the current flows. The
+[contracts](docs/CONTRACTS.md) define their formats, and
+[architecture decisions](docs/adr/README.md) record the tradeoffs.
 
-Use an Apple Silicon Mac with Xcode 26 or later, Rust stable, and `just`.
-Install the Rust targets once:
+## 🚀 Quick start
+
+Use an Apple Silicon Mac with Xcode 26 or later, an installed iPad simulator,
+Rust stable and [`just`](https://github.com/casey/just). Xcode builds and links the
+Rust libraries automatically.
 
 ```sh
 rustup target add aarch64-apple-darwin aarch64-apple-ios aarch64-apple-ios-sim
@@ -36,152 +53,111 @@ just mac-run
 just ipad-run
 ```
 
-The iPad command chooses an available recent iPad simulator. To select one:
+To choose a particular iPad simulator:
 
 ```sh
 python3 scripts/apple-app.py ipad run --simulator <simulator-uuid>
 ```
 
-You can also open `apps/apple/Vow.xcodeproj` and choose the Vow scheme with
-My Mac or an iPad simulator. Xcode builds and links the Rust static library.
-For a physical iPad, select your development team in Signing & Capabilities.
-The current project builds arm64 targets; Intel Mac support is not configured.
+You can also open [`apps/apple/Vow.xcodeproj`](apps/apple/Vow.xcodeproj), select
+the **Vow** scheme and choose My Mac or an iPad. For a physical device, configure
+your development team in Signing & Capabilities. Intel Macs are not configured.
 
-### Try the flow
+### Try an approval
 
-On Mac, open Members, finish Jordan's sample enrollment and confirm the rehearsal.
-Use Quorums or New Project to compose a policy or reuse an existing quorum. Export its ceremony transcript if you want to import
-it on iPad. In Requests, create and export a sample request.
+1. On iPad, create a personal profile and select iPad + security key or Ledger.
+2. On Mac, create an organization, add sample members and create a project quorum.
+   Use **Requests → Sample request** for a rehearsal, or **Apps** to capture the
+   built-in transaction preview and export a `.vow` file.
+3. Transfer the file to iPad through Files, AirDrop or another file transport.
+4. Select a profile, review the request, add handwritten consent and authorize.
+5. Share the resulting approval, or export it again from History.
 
-On iPad, complete device setup, choose a project from Home, then choose Load Sample Request or import the Mac's JSON request. Review the amount,
-recipient and fingerprint. Choose Review & Approve and follow the full-screen Review → Authorize → Export flow. Draw in the consent canvas. After a one-second pause, Vow checks readiness; tap
-Authorize, enter the registered key’s PIN, touch the key and authenticate on iPad to create the approval. Vow verifies the signature in Rust before offering Share
-Approval. History lets you export the approval again.
-
-The simulator explicitly uses a software key. Physical iPads use a device-bound
-Secure Enclave key with biometric access control and no software fallback. That
-app is installed on a physical iPad mini; hands-on biometric signing verification
-remains pending. Signing identities persist in device-only Keychain storage; workspace state
-and receipt history remain in memory. Handwriting is captured, not matched.
-Passport reading, pairing, production attestation policy and on-chain
-submission are not implemented. Prototype files cannot authorize a real transfer.
-
-Organizations own members who enroll through a physical ceremony once. Projects
-select a reusable quorum of enrolled members and an approval threshold. In Mac’s
-New Project form, choose Reuse existing or Create new. Creating projects never
-resets enrollment or changes another project’s quorum. New organizations start
-empty; add members and complete their sample enrollment first. State remains
-in memory, and enrollment is simulated until Passport and device pairing are wired.
-
-Explain Request optionally uses Apple’s on-device Foundation Models API after an
-explicit tap. Rust supplies bounded transfer facts; generated prose cannot alter
-or authorize an approval. Availability is checked locally, with no cloud fallback.
-Model assets must already be installed. Native generation has been exercised on
-Mac and the iPad mini simulator; physical-device offline testing remains pending.
-
-The iPad opens to a grouped project home with team subtitles and project rows.
-A Projects toolbar button returns there from a project’s requests.
-
-A floating red or green connection pill sits at the bottom left on iPad, clear
-of Back and other actions, with the request countdown on the right. Mac retains
-a footer strip. Sample requests show a five-minute Demo
-timer; real blockhash estimates and missing expiry context are labelled separately.
-Tap the countdown for details. The same status control stays visible during consent. During onboarding, focusing
-a field hides the header and both footer rows to preserve keyboard space. Done
-restores them; the offline gate remains active throughout. The iPad app stays
-locked until the system reports no available network path. A connected, uncertain
-or on-demand path shows a dedicated disconnect screen and blocks the workspace,
-review and sharing flows. Disconnecting unlocks automatically. Reconnecting cancels
-pending authorization, closes sensitive screens and requires a fresh review.
-
-Vow sends no internet probe. The gate conservatively locks for local networks and
-VPNs too, even when they cannot reach the internet. This is an app interaction and
-approval guard, not a system firewall. The Mac ceremony coordinator has the bottom
-status strip but remains usable while connected.
-
-### Capture a transaction from a webpage
-
-On Mac, open **Apps → Connect Vow → Connect Preview Account → Sign transaction**.
-Review optionally refreshes the unsigned draft blockhash using the project RPC,
-after checking its genesis, and records its observation and expiry-height context.
-Changing the blockhash discards any previous replay.
-The native Review → Replay → Checks → Export sheet runs the embedded Surfpool SDK,
-exports its pre-state and independently reproduces the result in LiteSVM. Drag the
-`.vow` tile, choose Share, or save it. The provider reports explicitly that nothing
-was signed or submitted. The accepted signing preview is one unsigned SOL transfer
-from a public fixture account, not a general-purpose wallet.
-
-Transactions outside that transfer preview open the generic native wire inspector.
-Installed decoding currently recognizes Payment Channels open/distribute as test
-cases. These are examples of supported instruction layouts, not app actions.
-The inspector exports raw transaction bytes or an optional `.vow` companion.
-Account-state verification and an attestation guard remain required before signing
-such actions. Unknown instructions and unresolved lookup tables stay blocked.
-
-The iPad also accepts plain binary, hex, base64 and JSON transaction dumps through
-Import, Files or a file URL. A `.vow` container is optional. Plain transactions do
-not encode their chain or blockhash observation time; the inspector labels the
-selected project network as an assumption and shows lifetime as unavailable.
-When companion blockhash context exists, it displays an estimated countdown,
-observation timestamp and last valid block height. Offline expiry cannot be proven
-from time alone. A persistent Squads action needs a fresh outer execution blockhash.
-
-Project networks are explicit: Community grants defaults to Devnet; Operations to
-Mainnet. New projects require a network. Captures, RPC metadata reads, review files,
-replay bundles and approval preimages are bound to the selected chain and genesis.
-The current transfer replay is always synthetic local state, even for a Mainnet
-project. Neither app submits to a public network.
-
-### Verification
+The iPad workspace requires an unavailable system network path. Connected local
+networks and VPNs also lock it; Vow sends no internet probe. Simulator signing uses
+explicit software fixtures and does not exercise physical security hardware.
+To open the DEBUG simulator with those fixtures after `just ipad-run`:
 
 ```sh
-just core-test
-just core-lint
-just mac-test
-just ipad-test
+xcrun simctl launch --terminate-running-process booted org.vow.prototype \
+  --ui-test-onboarding=completed --ui-test-security-key=connected \
+  --ui-test-network=offline
 ```
 
-UI tests exercise the Mac ceremony and the iPad review/consent/sign/share-ready
-flow. Xcode stores test screenshots in its `.xcresult` bundle under `.local`.
-The production design and remaining milestones still apply beyond this rehearsal.
+These flags simulate the hardware and network gate for a UI rehearsal.
 
-### iPad setup and your security key
+## 🔑 Signing profiles
 
-Vow first restores an existing signing identity from device-only Keychain storage,
-or asks you to create one. Plug in the security key and choose Check This Key.
-Vow never sets, changes or resets a PIN, and never asks for a management key.
+**iPad + YubiKey.** The iPad key is P-256 and stays in Secure Enclave. New profiles
+use direct USB signing. Compatible FIDO2 keys use their existing PIN; supported
+PIV keys can be prepared on the iPad without replacing existing credentials or
+changing the PIN. A metadata-confirmed factory smart-card PIN is handled
+without a PIN field. A factory PIN is public and is not a separate knowledge
+factor. Existing native Apple registrations retain their original method.
 
-When the native Apple security-key domain is configured, iPadOS handles your usual
-FIDO2 PIN and key touch in its system sheet. Vow has no PIN field in this path.
-This supports older USB security keys without direct CCID FIDO2 support. Activation
-requires a controlled HTTPS domain and an associated-domain-capable signing profile;
-the current configuration uses `vow.scarce.sh`. See
-[native-key configuration](services/native-key-association/README.md). Offline
-registration and assertions still require validation on the physical iPad.
+New smart-card setup and recovery secrets are stored in this iPad's private
+Keychain. A recovery export is still needed. Secure Enclave keys cannot be
+restored onto another iPad, and resetting Vow deletes its local signing and setup
+records. See the [setup and recovery boundaries](docs/DESIGN.md#on-device-piv-setup-2026-11-11).
 
-In the legacy adapter, on keys supporting FIDO2 over USB smart-card transport, use the usual security-key
-PIN. Vow finds and reuses its existing discoverable credential, or adds one for
-Vow if none exists. Your other sign-ins are unchanged. Direct USB CCID FIDO2 needs
-YubiKey firmware 5.8 or newer and the required applet capabilities.
+**Ledger.** iPad connects to Nano X, Nano Gen5 and Flex over Bluetooth. The Mac uses
+the Rust Ledger adapter. Vow verifies the account and returned signature; it never
+asks for the Ledger PIN. Current Ledger approvals remain off-chain evidence.
 
-Older keys can require a separate smart-card signing setup. The app explains this
-before asking for a PIN. A smart-card PIN is different from a FIDO2 sign-in PIN.
-If setup is needed, the screen gives Mac/administrator instructions without asking
-you to manage PIV locations or reset anything. Existing compatible PIV enrollments
-remain supported.
+A profile belongs to its user. Organization membership is enrolled once through a
+ceremony coordinated on Mac. A project references a reusable quorum of those
+members, and a profile must be explicitly registered for its seat. Creating a
+profile alone does not grant multisig membership. Handwriting records consent;
+Vow does not authenticate the pen or match the signature to a person's identity.
 
-Touch the key when it flashes, then authenticate on iPad to finish. Failed PINs are
-never retried automatically. The direct adapter refuses the final remaining attempt;
-iPadOS owns PIN handling and retry limits in the native flow. Focusing
-a field hides the header and footers; Done restores them. The offline lock stays
-active. Simulator tests cover native WebAuthn and legacy signing with labelled software fixtures;
-physical FIDO2 and firmware behavior still need hands-on validation.
+## 📦 Review files
 
-Under This iPad, share `Vow-device-enrollment.json` with the administrator. This is
-a public dual-key proof, not an activated Solana multisig member address. On-chain
-registration, production attestation and recovery remain unfinished.
+A `.vow` file is a JSON review container. Depending on the export path, it includes
+transaction bytes, network and project context, instruction descriptions,
+blockhash observations and replay fixtures. It carries no signing private keys.
+Its exact schemas and limits are in the [contracts](docs/CONTRACTS.md).
 
-Vow's stable credential namespace helps discover a key's registration across
-installations. It cannot regenerate a lost iPad private key. Keychain identity
-lookup is scoped to the app signing identity and device; do not rely on uninstall,
-new devices or biometric changes preserving it. Those cases need re-enrollment.
+The iPad also imports binary, hex, base64 and JSON transaction dumps. A bare Solana
+transaction does not identify its network or when its blockhash was observed;
+Vow labels those missing facts. A countdown is an estimate, not proof that a
+transaction is still valid. Supplied labels, IDLs and fixtures are untrusted input.
+
+## 🗂️ Repository layout
+
+```text
+vow/
+├── apps/
+│   ├── apple/          Shared SwiftUI app, platform adapters and UI tests
+│   └── web/            Public website at vow.scarce.sh
+├── crates/
+│   ├── core/           Formats, decoding, identities, policy and signature verification
+│   ├── ffi/            C ABI shared by the Apple apps
+│   ├── replay/         Offline replay verification
+│   ├── simulation/     Mac Surfpool simulation and fixture export
+│   └── ledger/         Desktop Ledger adapter
+├── spikes/             P-256 and bridge compatibility experiments
+├── scripts/            Build, hardware-policy and asset tools
+└── docs/               Design, security, contracts, research and decisions
+```
+
+## 🛠️ Development
+
+```sh
+just crypto-test                  # signatures, enrollment, replay protection and FFI
+just crypto-lint                  # Rust Clippy
+just crypto-fmt                   # Rust formatting
+scripts/test-piv-pin-policy.sh     # PIN selection and interrupted key-setup checks
+just mac-test                     # native Mac UI tests
+just ipad-test                    # native iPad UI tests
+```
+
+[Cryptography verification](docs/CRYPTO_TESTING.md) describes the test coverage.
+Native test results and screenshots are written under `.local/`.
+
+For the website, install its dependencies with `pnpm --dir apps/web install`,
+then run `just web-dev`. See [`apps/web/README.md`](apps/web/README.md) for the web
+build and deployment workflow.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

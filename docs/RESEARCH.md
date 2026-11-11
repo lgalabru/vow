@@ -384,3 +384,94 @@ reason that the webcredentials association could not be verified for
 verification as the observed blocker; it does not confirm the USB-session
 hypothesis. The iPad was offline and the candidate was installed over USB. An
 online association refresh followed by an offline assertion is the next test.
+
+## Crypto regression verification (2026-11-10)
+
+The pinned bridge compatibility check accepts a wrapped CryptoKit assertion and
+rejects bare signatures, missing presence, wrong challenges and message tampering.
+It accepts the missing-user-verification case. Vow rejects that case locally, but
+local checks cannot enforce policy against direct program submission. The planned
+on-chain policy boundary must cover user verification before treasury use. Test
+commands and remaining hardware limits are in [CRYPTO_TESTING.md](CRYPTO_TESTING.md).
+
+## solana-keychain Ledger backend (2026-11-10)
+
+Read the clean local repository at `ed68ba3232c99fa3ed3b57344e0b6e496aa08777`.
+`rust/src/ledger/mod.rs` implements desktop USB-HID through solana-remote-wallet,
+with a serialized actor and exclusive claims. It verifies returned signatures over
+exact message bytes before attaching them. Caller deadlines cannot interrupt the
+underlying blocking HID read; the claim remains held until that operation returns.
+
+The configurable default path is `m/44'/501'/0'`. Address confirmation defaults off
+and automatic Solana-app opening defaults on; Vow should override both for verified
+enrollment and passive discovery respectively. The `ledger` Cargo feature is
+explicitly excluded from `all`. Use a macOS-only adapter and pin the dependency;
+the existing HID backend is not an iPad implementation.
+
+The transaction signer preserves message bytes and supports partial signatures.
+The message signer wraps UTF-8 payloads in a Ledger off-chain envelope, with an
+85-byte V0 one-signer header and all-zero application domain. It does not sign raw
+Vow JSON. Tests pin Ledger app source at
+`c855c1a0ea12e76406efbfd17203ecf419952e27`. That source conformance is not evidence
+that every released Ledger Solana app supports the operation. Test actual versions.
+
+Ledger's old `hw-transport-ios-ble` repository is archived. The current native
+mobile Device Management Kit is a candidate for an iPad transport investigation.
+Its current documentation labels it alpha and lists Bluetooth for iOS. The mobile
+Solana signer documents address retrieval, transaction signing and off-chain message
+signing. These API descriptions do not certify Vow's intended device/app matrix.
+The resulting model, UX and proof boundaries are in
+[RFD 0005](rfd/0005-signing-profiles-and-ledger.md).
+
+Sources: [local backend](../../solana-keychain/rust/src/ledger/mod.rs),
+[Ledger transport documentation](https://developers.ledger.com/docs/device-interaction/dmk-ts/integration/how_to/transports),
+[archived Swift BLE transport](https://github.com/LedgerHQ/hw-transport-ios-ble).
+
+## Ledger transport implementation update (2026-11-10)
+
+The owner selected Nano X, Nano Gen5 and Flex. Published solana-keychain PR 358 at
+`0b7bf8368ea5650e6870504c6c36ac2d1aad3bc8` is the macOS dependency. Its exclusive
+claim remains process-wide while sessions are keyed by device path. Vow validates
+its own enrollment/approval domains before entering the hardware adapter and tests
+its mobile envelope against the pinned backend's serialization.
+
+Apple documents USBDriverKit on M-series iPads. It is not the generic HID route
+needed by this A-series iPad mini. The current Ledger native SDK documents Bluetooth
+for iOS and is alpha. Vow's prototype uses a thin CoreBluetooth adapter and bounded
+Rust framing/APDU validation instead. Ledger's published identifiers list normal
+Nano X `0004` and Nano Gen5 `8004` services; Gen5's alternate `9004` is documented
+for early bootloader modes, which are excluded from signing discovery.
+
+Protocol references: [Ledger identifiers](https://developers.ledger.com/docs/device-interaction/dmk-ts/references/identifiers),
+[Apple USBDriverKit](https://developer.apple.com/documentation/usbdriverkit),
+[Ledger APDU framing reference](https://github.com/LedgerHQ/hw-transport-ios-ble/blob/main/Sources/BleTransport/APDU.swift).
+The archived framing source was read as a protocol reference, not added as a package.
+
+2026-11-10 physical feedback: the owner's connected device is a Flex. Add its
+normal `13d63400-2c97-3004-0000-4c6564676572` BLE service to discovery, alongside
+Nano X and Nano Gen5. Retrieve already-connected matching peripherals before
+scanning, and display scanning progress. Service/name matching remains a hint,
+not an authenticated device identity.
+
+## Native security-key domain association recheck (2026-11-11)
+
+The installed-development entitlement is `webcredentials:vow.scarce.sh`; signed
+application ID is `4HY7TSGF6M.org.vow.prototype`. The origin AASA at
+`https://vow.scarce.sh/.well-known/apple-app-site-association` returns HTTP 200,
+JSON and that exact webcredentials app ID. Apple's correct CDN endpoint,
+`https://app-site-association.cdn-apple.com/a/v1/vow.scarce.sh`, also returns HTTP 200
+and the matching file. The unversioned `/a/<domain>` diagnostic URL returns 404
+and must not be mistaken for an association failure. Neither a CDN success nor an
+origin check proves the device's cached state. The owner sees AS1004 specifically
+naming a webcredentials association failure after offline development updates.
+
+Apple documents association retrieval during installation through its CDN, delayed
+CDN updates and periodic device refresh. An online installation is required for the
+next physical test; a successful origin check alone cannot establish that iPadOS
+accepted the association. Do not rotate the key, change the RP or reset a PIN to
+address this error. Developer alternate-mode fetching exists but requires device
+opt-in and changes certificate trust behavior; it is not enabled as a default for
+this signing application.
+
+Sources: [Supporting associated domains](https://developer.apple.com/documentation/xcode/supporting-associated-domains),
+[Associated Domains entitlement](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.developer.associated-domains).
