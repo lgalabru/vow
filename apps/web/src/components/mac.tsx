@@ -104,7 +104,7 @@ function Ceremony({ confirmed, wide }: { confirmed: boolean; wide: boolean }) {
       sidebarWidth={220}
       sidebar={
         <nav className="mac-side">
-          <Image className="mac-side-mark" src="/vow-icon.png" alt="" width={36} height={36} />
+          <Image className="mac-side-mark" src="/vow-mark.png" alt="" width={36} height={36} />
           <div className="mac-side-name">Vow</div>
           {NAV.map((item) =>
             'group' in item ? (

@@ -88,7 +88,7 @@ export function Header({
       <header className="site-header">
         <nav className="navigation" aria-label="Main navigation">
           <a className="brand" href="#" aria-label="Vow home">
-            <Image src="/vow-icon.png" alt="" width={28} height={28} />
+            <Image src="/vow-mark.png" alt="" width={28} height={28} />
             vow
           </a>
           <div className="nav-links">
@@ -141,7 +141,7 @@ export function Closing() {
   return (
     <section className="shell" id="availability" aria-labelledby="availability-heading">
       <Reveal className="closing">
-        <Image src="/vow-icon.png" alt="Vow app icon" width={72} height={72} />
+        <Image src="/vow-mark.png" alt="Vow app icon" width={72} height={72} />
         <p className="tag">Currently in development</p>
         <h2 id="availability-heading">
           Taking the time
