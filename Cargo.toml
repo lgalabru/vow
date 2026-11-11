@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
-members = ["crates/core", "crates/ffi", "crates/replay", "crates/simulation"]
-exclude = ["spikes/bridge-check"]
+members = ["crates/core", "crates/ffi", "crates/replay", "crates/simulation", "crates/ledger"]
+exclude = ["spikes/bridge-check", ".local/external-signature-program"]
 
 [workspace.package]
 version = "0.1.0"

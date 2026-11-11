@@ -15,6 +15,7 @@ struct QuorumSummary: Decodable, Identifiable {
   let name: String
   let memberIds: [UInt64]
   let threshold: UInt64
+  let seats: [QuorumSeat]?
   var policyLabel: String { "\(threshold) of \(memberIds.count) approvals" }
 }
 
@@ -30,7 +31,7 @@ struct OrganizationSwitcher: View {
   var onCreate: (() -> Void)?
   var didSelect: () -> Void = {}
   var body: some View {
-    if let state = model.state {
+    if let state = model.state, !state.organizationId.isEmpty {
       Menu {
         Picker(
           "Organization",
@@ -54,6 +55,9 @@ struct OrganizationSwitcher: View {
       }
       .accessibilityLabel("Switch organization")
       .accessibilityIdentifier("organizationSwitcher")
+    } else if let onCreate {
+      Button("Create Organization", systemImage: "plus", action: onCreate)
+        .font(.subheadline).accessibilityIdentifier("createOrganization")
     }
   }
 }
@@ -104,6 +108,7 @@ struct WorkspaceNameSheet: View {
   @State private var quorumId = ""
   @State private var quorumName = ""
   @State private var selectedMembers: Set<UInt64> = []
+  @State private var selectedProfiles: [UInt64: String] = [:]
   @State private var threshold = 1
   @State private var chain = "devnet"
   private var canCreate: Bool {
@@ -112,6 +117,8 @@ struct WorkspaceNameSheet: View {
     if !createNewQuorum { return model.state?.quorums.contains { $0.id == quorumId } == true }
     return !quorumName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
       && !selectedMembers.isEmpty && threshold <= selectedMembers.count
+      && (model.state?.profiles.isEmpty == true
+        || selectedMembers.allSatisfy { selectedProfiles[$0] != nil })
   }
   var body: some View {
     NavigationStack {
@@ -145,8 +152,20 @@ struct WorkspaceNameSheet: View {
                   }
                 }.accessibilityIdentifier("existingQuorum")
                 if let quorum = state.quorums.first(where: { $0.id == quorumId }) {
+                  if quorum.seats?.isEmpty != false {
+                    Text("Legacy rehearsal quorum · Signing profiles are not bound to its members.")
+                      .font(.caption).foregroundStyle(.secondary)
+                  }
                   ForEach(state.members.filter { quorum.memberIds.contains($0.id) }) { member in
-                    Label(member.name, systemImage: "person.crop.circle.badge.checkmark")
+                    VStack(alignment: .leading) {
+                      Label(member.name, systemImage: "person.crop.circle.badge.checkmark")
+                      if let seat = quorum.seats?.first(where: { $0.memberId == member.id }),
+                        let profile = state.profiles.first(where: { $0.id == seat.profileId })
+                      {
+                        Text("\(profile.name) · \(profile.methodLabel)").font(.caption)
+                          .foregroundStyle(.secondary)
+                      }
+                    }
                   }
                 }
               }
@@ -175,6 +194,21 @@ struct WorkspaceNameSheet: View {
                     .toggleStyle(.checkbox)
                   #endif
                   .accessibilityIdentifier("quorum-member-\(member.id)")
+                if selectedMembers.contains(member.id), !state.profiles.isEmpty {
+                  Picker(
+                    "Signing profile",
+                    selection: Binding(
+                      get: { selectedProfiles[member.id] ?? "" },
+                      set: { selectedProfiles[member.id] = $0 })
+                  ) {
+                    Text("Choose a profile").tag("")
+                    ForEach(state.profiles.filter { $0.memberId == member.id && !$0.revoked }) {
+                      profile in
+                      Text("\(profile.name) · \(profile.methodLabel)").tag(profile.id)
+                    }
+                  }.accessibilityIdentifier("quorum-profile-\(member.id)")
+                }
+
               }
               if state.members.isEmpty {
                 Text("Add members and complete their enrollment before creating a quorum.")
@@ -226,9 +260,19 @@ struct WorkspaceNameSheet: View {
     if kind == .project {
       fields["chain"] = chain
       if createNewQuorum {
-        fields["quorum"] =
-          ["name": quorumName, "member_ids": selectedMembers.sorted(), "threshold": threshold]
-          as [String: Any]
+        if model.state?.profiles.isEmpty == false {
+          fields["quorum"] =
+            [
+              "name": quorumName,
+              "profiles": selectedMembers.sorted().map {
+                ["member_id": $0, "profile_id": selectedProfiles[$0] ?? ""] as [String: Any]
+              }, "threshold": threshold,
+            ] as [String: Any]
+        } else {
+          fields["quorum"] =
+            ["name": quorumName, "member_ids": selectedMembers.sorted(), "threshold": threshold]
+            as [String: Any]
+        }
       } else {
         fields["quorum_id"] = quorumId
       }

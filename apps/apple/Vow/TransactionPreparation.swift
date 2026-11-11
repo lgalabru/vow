@@ -233,7 +233,7 @@ struct PreparedWebTransaction: Decodable {
                       Image(
                         systemName: item.id == "squads_execute"
                           ? "arrow.right.circle" : "shield.lefthalf.filled"
-                      ).foregroundStyle(.blue).frame(width: 24)
+                      ).foregroundStyle(.tint).frame(width: 24)
                       VStack(alignment: .leading, spacing: 5) {
                         Text(item.title).font(.headline)
                         Text(
@@ -249,13 +249,13 @@ struct PreparedWebTransaction: Decodable {
                   .foregroundStyle(.secondary)
                 HStack(spacing: 18) {
                   Image(systemName: "doc.badge.arrow.up").font(.system(size: 42, weight: .light))
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(.tint)
                   VStack(alignment: .leading, spacing: 6) {
                     Text(prepared.filename).font(.headline)
                     Text("Vow transaction · \(prepared.package.utf8.count.formatted()) bytes").font(
                       .caption
                     ).foregroundStyle(.secondary)
-                    Text("Drag to export").font(.caption.weight(.medium)).foregroundStyle(.blue)
+                    Text("Drag to export").font(.caption.weight(.medium)).foregroundStyle(.tint)
                   }
                   Spacer()
                   Image(systemName: "arrow.up.and.down.and.arrow.left.and.right").foregroundStyle(

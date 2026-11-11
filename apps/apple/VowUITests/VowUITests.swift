@@ -16,7 +16,16 @@ final class VowUITests: XCTestCase {
         app.launchArguments.append("--ui-test-network=offline")
       }
     #endif
+    if !app.launchArguments.contains(where: { $0.hasPrefix("--ui-test-") }) { app.launchArguments.append("--ui-test-session") }
     app.launch()
+    #if os(iOS)
+      if app.launchArguments.contains("--ui-test-onboarding=required"),
+        !app.launchArguments.contains("--ui-test-profile-assistant"),
+        app.textFields["profileName"].waitForExistence(timeout: 2) {
+        enterProfileName(app, "Signing iPad")
+        app.buttons["profileContinue"].tap()
+      }
+    #endif
   }
   private func capture(_ app: XCUIApplication, _ name: String) {
     #if os(macOS)
@@ -28,6 +37,18 @@ final class VowUITests: XCTestCase {
     attachment.lifetime = .keepAlways
     add(attachment)
   }
+  #if os(macOS)
+    func testMacProfilesSetupDoesNotContactLedgerBeforeConfirmation() throws {
+      let app = XCUIApplication()
+      launch(app)
+      app.buttons["mac-profiles"].click()
+      app.buttons["addProfile"].click()
+      XCTAssertTrue(app.textFields["profileName"].waitForExistence(timeout: 5))
+      XCTAssertFalse(app.buttons["profileContinue"].isEnabled)
+      XCTAssertFalse(app.secureTextFields.firstMatch.exists)
+      capture(app, "Mac — Ledger profile setup")
+    }
+  #endif
   func testPrototypeFlow() throws {
     let app = XCUIApplication()
     app.launchArguments = [
@@ -35,7 +56,8 @@ final class VowUITests: XCTestCase {
     ]
     launch(app)
     #if os(macOS)
-      XCTAssertTrue(app.staticTexts["Organization setup"].waitForExistence(timeout: 10))
+      XCTAssertTrue(app.staticTexts["Solana Foundation"].waitForExistence(timeout: 10))
+      app.buttons["Members"].firstMatch.click()
       capture(app, "Mac — Ceremony overview")
       app.buttons["Set Up…"].firstMatch.click()
       XCTAssertTrue(app.buttons["Complete Sample Enrollment"].waitForExistence(timeout: 5))
@@ -55,13 +77,14 @@ final class VowUITests: XCTestCase {
       XCTAssertTrue(app.buttons["Load Sample Request"].waitForExistence(timeout: 15))
       app.buttons["Load Sample Request"].tap()
       XCTAssertTrue(app.buttons["Review & Approve"].waitForExistence(timeout: 5))
-      assertFooterSeparation(app, action: app.buttons["Review & Approve"])
+      assertFooterSeparation(app, action: app.buttons["Review & Approve"], inline: true)
       let countdown = app.buttons["requestCountdown"]
       XCTAssertTrue(countdown.waitForExistence(timeout: 5))
       let network = app.buttons["networkStatus"]
       XCTAssertEqual(countdown.frame.midY, network.frame.midY, accuracy: 2)
       XCTAssertGreaterThan(countdown.frame.minX, network.frame.maxX)
       capture(app, "iPad — Review request")
+      chooseSigningProfile(app)
       app.buttons["Review & Approve"].tap()
       XCTAssertTrue(app.staticTexts["Review request"].waitForExistence(timeout: 5))
       XCTAssertEqual(app.buttons.matching(identifier: "networkStatus").count, 1)
@@ -139,10 +162,11 @@ final class VowUITests: XCTestCase {
       XCTAssertEqual(app.buttons.matching(identifier: "networkStatus").count, 1)
       capture(app, "iPad — Connection lock")
       setConnection(app, connected: false)
-      XCTAssertTrue(app.staticTexts["Signing workspace"].waitForExistence(timeout: 5))
+      XCTAssertTrue(app.staticTexts["Solana Foundation"].waitForExistence(timeout: 5))
       XCTAssertEqual(app.buttons.matching(identifier: "networkStatus").count, 1)
       openSampleProject(app)
       app.buttons["Load Sample Request"].tap()
+      chooseSigningProfile(app)
       app.buttons["Review & Approve"].tap()
       XCTAssertTrue(app.staticTexts["Review request"].waitForExistence(timeout: 5))
       app.buttons["Continue"].tap()
@@ -155,6 +179,7 @@ final class VowUITests: XCTestCase {
       XCTAssertEqual(app.buttons.matching(identifier: "networkStatus").count, 1)
       setConnection(app, connected: false)
       openSampleProject(app)
+      chooseSigningProfile(app)
       app.buttons["Review & Approve"].tap()
       XCTAssertTrue(app.staticTexts["Review request"].waitForExistence(timeout: 5))
       XCTAssertFalse(app.descendants(matching: .any)["authorizationRequestPanel"].firstMatch.exists)
@@ -165,6 +190,7 @@ final class VowUITests: XCTestCase {
       launch(app)
       openSampleProject(app)
       app.buttons["Load Sample Request"].tap()
+      chooseSigningProfile(app)
       app.buttons["Review & Approve"].tap()
       XCTAssertTrue(app.buttons["Continue"].waitForExistence(timeout: 5))
       app.buttons["Continue"].tap()
@@ -187,6 +213,7 @@ final class VowUITests: XCTestCase {
       XCTAssertTrue(app.buttons["Review & Approve"].waitForExistence(timeout: 5))
       XCTAssertFalse(app.staticTexts["Approval created"].exists)
       // Retry proves the retained device key still matches the Rust session.
+      chooseSigningProfile(app)
       app.buttons["Review & Approve"].tap()
       XCTAssertTrue(app.staticTexts["Review request"].waitForExistence(timeout: 5))
       app.buttons["Continue"].tap()
@@ -210,6 +237,7 @@ final class VowUITests: XCTestCase {
       launch(app)
       openSampleProject(app)
       app.buttons["Load Sample Request"].tap()
+      chooseSigningProfile(app)
       app.buttons["Review & Approve"].tap()
       app.buttons["Continue"].tap()
       let canvas = app.descendants(matching: .any)["consentCanvas"].firstMatch
@@ -249,6 +277,66 @@ final class VowUITests: XCTestCase {
           timeout: 5))
       capture(app, "iPad — YubiKey removal interrupts authorization")
     }
+    private func chooseSigningProfile(_ app: XCUIApplication) {
+      let picker = app.buttons["signingProfileSelector"]
+      XCTAssertTrue(picker.waitForExistence(timeout: 5))
+      picker.tap()
+      let choice = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "choose-signing-profile-")).firstMatch
+      XCTAssertTrue(choice.waitForExistence(timeout: 5))
+      choice.tap()
+    }
+    private func openProfileDetails(_ app: XCUIApplication) {
+      app.buttons["signer-section-profiles"].tap()
+      let details = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "profileDetails-")).firstMatch
+      XCTAssertTrue(details.waitForExistence(timeout: 5))
+      details.tap()
+      app.buttons["Technical details"].tap()
+      XCTAssertTrue(app.staticTexts["devicePublicKey"].waitForExistence(timeout: 5))
+    }
+    func testResetEverythingDeletesTheSigningKeyAndStoredProfiles() throws {
+      let app = XCUIApplication()
+      app.launchArguments = ["--ui-test-network=offline", "--ui-test-security-key=connected", "--ui-test-onboarding=required", "--ui-test-identity=\(UUID().uuidString)", "--ui-test-native-security-key"]
+      launch(app)
+      app.buttons["onboardingContinue"].tap()
+      app.buttons["Signing details"].tap()
+      let oldKey = app.staticTexts["onboardingDevicePublicKey"].label
+      app.buttons["onboardingContinue"].tap()
+      app.buttons["profileContinue"].tap()
+      app.buttons["signer-section-device"].tap()
+      XCTAssertFalse(app.staticTexts["devicePublicKey"].exists)
+      capture(app, "iPad — Minimal settings")
+      app.buttons["resetEverything"].tap()
+      app.buttons["confirmResetEverything"].firstMatch.tap()
+      XCTAssertTrue(app.textFields["profileName"].waitForExistence(timeout: 5))
+      app.terminate()
+      launch(app)
+      XCTAssertTrue(app.buttons["restoreNativeKey"].waitForExistence(timeout: 5))
+      app.buttons["onboardingContinue"].tap()
+      app.buttons["Signing details"].tap()
+      let newKey = app.staticTexts["onboardingDevicePublicKey"].label
+      XCTAssertNotEqual(newKey, oldKey)
+      app.buttons["onboardingContinue"].tap()
+      app.buttons["profileContinue"].tap()
+      XCTAssertFalse(app.buttons["project-project-grants"].exists)
+      openProfileDetails(app)
+      XCTAssertEqual(app.staticTexts["devicePublicKey"].label, newKey)
+      capture(app, "iPad — New key after full reset")
+    }
+    func testRequestRequiresAnExplicitProfileAndResetsForNewRequest() throws {
+      let app = XCUIApplication()
+      launch(app)
+      openSampleProject(app)
+      app.buttons["Load Sample Request"].tap()
+      XCTAssertFalse(app.buttons["Review & Approve"].isEnabled)
+      chooseSigningProfile(app)
+      XCTAssertTrue(app.buttons["Review & Approve"].isEnabled)
+      XCTAssertFalse(app.buttons["signer-section-organization"].exists)
+      app.buttons["openProjects"].tap()
+      app.buttons["project-project-operations"].tap()
+      app.buttons["Load Sample Request"].tap()
+      XCTAssertFalse(app.buttons["Review & Approve"].isEnabled)
+      capture(app, "iPad — Explicit signing profile")
+    }
     private func openSampleProject(_ app: XCUIApplication) {
       let project = app.buttons["project-project-grants"]
       let request = app.buttons["Review & Approve"]
@@ -262,10 +350,11 @@ final class VowUITests: XCTestCase {
     func testProjectHomeNavigation() throws {
       let app = XCUIApplication()
       launch(app)
-      XCTAssertTrue(app.staticTexts["Signing workspace"].waitForExistence(timeout: 10))
+      XCTAssertTrue(app.staticTexts["Solana Foundation"].waitForExistence(timeout: 10))
       capture(app, "iPad — Project home")
       app.buttons["project-project-operations"].tap()
       XCTAssertTrue(app.buttons["Load Sample Request"].waitForExistence(timeout: 5))
+      XCTAssertTrue(app.staticTexts["Network: Mainnet"].exists)
       app.buttons["Load Sample Request"].tap()
       XCTAssertTrue(app.buttons["Review & Approve"].waitForExistence(timeout: 5))
       app.buttons["openProjects"].tap()
@@ -293,7 +382,64 @@ final class VowUITests: XCTestCase {
     func testNativeKeyRemovalPreventsApprovalCompletion() throws {
       try completeNativeEnrollmentAndSign(removingKeyDuringApproval: true)
     }
-    private func completeNativeEnrollmentAndSign(removingKeyDuringApproval: Bool = false) throws {
+    func testProfilesReuseExistingEnrollmentWithoutRotatingDeviceKey() throws {
+      try completeNativeEnrollmentAndSign(withProfile: true)
+    }
+    func testLedgerProfileSetupDoesNotRequestHostPINOrEnableUnconnectedSigning() throws {
+      let app = XCUIApplication()
+      app.launchArguments = [
+        "--ui-test-network=offline", "--ui-test-onboarding=completed",
+        "--ui-test-security-key=connected",
+      ]
+      launch(app)
+      app.buttons["signer-section-profiles"].tap()
+      XCTAssertEqual(app.buttons.matching(identifier: "Import Profile").count, 1)
+      XCTAssertFalse(app.buttons["Import File"].exists)
+      XCTAssertFalse(app.staticTexts["Local prototype · No real funds"].exists)
+      app.buttons["addProfile"].tap()
+      enterProfileName(app, "Treasury Ledger")
+      app.buttons["method-ledger"].tap()
+      capture(app, "iPad — Signing method selection")
+      app.buttons["profileContinue"].tap()
+      XCTAssertTrue(app.buttons["findLedger"].waitForExistence(timeout: 5))
+      XCTAssertFalse(app.secureTextFields.firstMatch.exists)
+      XCTAssertFalse(app.buttons["createProfile"].exists)
+      capture(app, "iPad — Ledger connection")
+    }
+    private func enterProfileName(_ app: XCUIApplication, _ value: String) {
+      let name = app.textFields["profileName"]
+      XCTAssertTrue(name.waitForExistence(timeout: 10))
+      XCTAssertFalse(app.buttons["profileMember"].exists)
+      name.tap()
+      name.typeText(value + "\n")
+      XCTAssertTrue(app.buttons["method-ledger"].waitForExistence(timeout: 5))
+    }
+    func testFirstLaunchPersonalAssistantWorksInLandscape() throws {
+      let app = XCUIApplication()
+      app.launchArguments = ["--ui-test-network=offline", "--ui-test-onboarding=required", "--ui-test-profile-assistant", "--ui-test-identity=\(UUID().uuidString)"]
+      launch(app)
+      XCUIDevice.shared.orientation = .landscapeLeft
+      defer { XCUIDevice.shared.orientation = .portrait }
+      expectation(for: NSPredicate { _, _ in app.windows.firstMatch.frame.width > app.windows.firstMatch.frame.height }, evaluatedWith: app)
+      waitForExpectations(timeout: 5)
+      XCTAssertTrue(app.textFields["profileName"].waitForExistence(timeout: 10))
+      capture(app, "iPad — New personal profile")
+      enterProfileName(app, "Ludo")
+      let ipad = app.buttons["method-ipad_security_key"]
+      let ledger = app.buttons["method-ledger"]
+      XCTAssertEqual(ipad.frame.minY, ledger.frame.minY, accuracy: 2)
+      XCTAssertLessThan(ipad.frame.maxX, ledger.frame.minX)
+      capture(app, "iPad — Method cards landscape")
+      ledger.tap()
+      app.buttons["profileContinue"].tap()
+      XCTAssertTrue(app.buttons["findLedger"].waitForExistence(timeout: 5))
+      XCTAssertFalse(app.secureTextFields.firstMatch.exists)
+      app.buttons["Back"].tap()
+      XCTAssertTrue(app.buttons["method-ledger"].waitForExistence(timeout: 5))
+    }
+    private func completeNativeEnrollmentAndSign(
+      removingKeyDuringApproval: Bool = false, withProfile: Bool = false
+    ) throws {
       let app = XCUIApplication()
       app.launchArguments = [
         "--ui-test-network=offline", "--ui-test-security-key=connected",
@@ -301,7 +447,6 @@ final class VowUITests: XCTestCase {
         "--ui-test-native-security-key", "--ui-test-open-device",
       ]
       launch(app)
-      app.buttons["onboardingContinue"].tap()
       XCTAssertTrue(app.buttons["restoreNativeKey"].waitForExistence(timeout: 5))
       XCTAssertFalse(app.secureTextFields["onboardingPIN"].exists)
       capture(app, "iPad — Native security-key setup")
@@ -310,15 +455,38 @@ final class VowUITests: XCTestCase {
       app.buttons["Signing details"].tap()
       let publicKey = app.staticTexts["onboardingDevicePublicKey"].label
       app.buttons["onboardingContinue"].tap()
+      XCTAssertTrue(app.staticTexts["Profile ready"].waitForExistence(timeout: 10))
+      app.buttons["profileContinue"].tap()
+      openProfileDetails(app)
       XCTAssertTrue(app.staticTexts["devicePublicKey"].waitForExistence(timeout: 5))
       app.terminate()
       if removingKeyDuringApproval { app.launchArguments.append("--ui-test-signing-delay") }
       launch(app)
+      openProfileDetails(app)
       XCTAssertTrue(app.staticTexts["devicePublicKey"].waitForExistence(timeout: 10))
       XCTAssertEqual(app.staticTexts["devicePublicKey"].label, publicKey)
+      app.buttons["profileDetailsDone"].tap()
+      if withProfile {
+        app.buttons["signer-section-profiles"].tap()
+        app.buttons["addProfile"].tap()
+        let name = app.textFields["profileName"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        enterProfileName(app, "Protected iPad")
+        app.buttons["profileContinue"].tap()
+        app.buttons["createProfile"].tap()
+        XCTAssertTrue(app.staticTexts["Profile ready"].waitForExistence(timeout: 10))
+        app.buttons["profileContinue"].tap()
+        XCTAssertTrue(app.staticTexts["Protected iPad"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Share public profile"].firstMatch.exists)
+        openProfileDetails(app)
+        XCTAssertEqual(app.staticTexts["devicePublicKey"].label, publicKey)
+        app.buttons["profileDetailsDone"].tap()
+        capture(app, "iPad — Existing identity preserved after profile registration")
+      }
       app.buttons["openProjects"].tap()
       openSampleProject(app)
       app.buttons["Load Sample Request"].tap()
+      chooseSigningProfile(app)
       app.buttons["Review & Approve"].tap()
       app.buttons["Continue"].tap()
       let canvas = app.descendants(matching: .any)["consentCanvas"].firstMatch
@@ -329,6 +497,18 @@ final class VowUITests: XCTestCase {
       let authorize = app.buttons["authorizeApproval"]
       expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: authorize)
       waitForExpectations(timeout: 5)
+      XCTAssertTrue(app.staticTexts["YubiKey verified"].exists)
+      XCTAssertFalse(app.staticTexts["Approval created"].exists)
+      if !removingKeyDuringApproval {
+        app.buttons["Clear"].tap()
+        XCTAssertFalse(app.staticTexts["YubiKey verified"].exists)
+        canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.65)).press(
+          forDuration: 0.1,
+          thenDragTo: canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.65, dy: 0.25)))
+        XCTAssertTrue(app.staticTexts["YubiKey verified"].waitForExistence(timeout: 5))
+        expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: authorize)
+        waitForExpectations(timeout: 5)
+      }
       authorize.tap()
       if removingKeyDuringApproval {
         XCTAssertTrue(app.buttons["Authorizing…"].waitForExistence(timeout: 3))
@@ -355,7 +535,6 @@ final class VowUITests: XCTestCase {
         "--ui-test-native-security-key", "--ui-test-native-cancel",
       ]
       launch(app)
-      app.buttons["onboardingContinue"].tap()
       XCTAssertTrue(app.buttons["restoreNativeKey"].waitForExistence(timeout: 5))
       app.buttons["onboardingContinue"].tap()
       XCTAssertTrue(app.buttons["restoreNativeKey"].waitForExistence(timeout: 5))
@@ -371,32 +550,122 @@ final class VowUITests: XCTestCase {
       ]
       launch(app)
       app.buttons["onboardingContinue"].tap()
-      app.buttons["onboardingContinue"].tap()
       let error = app.descendants(matching: .any)["onboardingError"].firstMatch
       XCTAssertTrue(error.waitForExistence(timeout: 5))
       XCTAssertTrue(error.label.contains("FIDO_RESPONSE"))
       XCTAssertFalse(app.staticTexts["This key needs one-time setup on your Mac"].exists)
       XCTAssertFalse(app.secureTextFields["onboardingPIN"].exists)
     }
-    func testUnconfiguredSmartCardExplainsSetupWithoutPINOrManagementFields() throws {
+    func testFreshSmartCardSetupStaysOfflineAndNeedsNoModeOrPINChoice() throws {
+      let app = XCUIApplication()
+      app.launchArguments = ["--ui-test-network=offline", "--ui-test-security-key=connected",
+        "--ui-test-onboarding=required", "--ui-test-identity=\(UUID().uuidString)",
+        "--ui-test-smartcard-unconfigured", "--ui-test-native-domain-enabled"]
+      launch(app)
+      app.buttons["onboardingContinue"].tap()
+      XCTAssertTrue(app.staticTexts["Set up this key for Vow"].waitForExistence(timeout: 5))
+      XCTAssertFalse(app.buttons["Continue with iPadOS"].exists)
+      XCTAssertFalse(app.buttons["Use iPadOS compatibility mode"].exists)
+      XCTAssertFalse(app.buttons["restoreNativeKey"].exists)
+      XCTAssertFalse(app.secureTextFields.firstMatch.exists)
+      XCTAssertTrue(app.buttons["onboardingContinue"].isEnabled)
+      capture(app, "iPad — Direct key setup without mode selection")
+      app.buttons["onboardingContinue"].tap()
+      XCTAssertTrue(app.staticTexts["Confirm this iPad"].waitForExistence(timeout: 5))
+      XCTAssertFalse(app.secureTextFields.firstMatch.exists)
+    }
+    func testSmartCardPreparationKeepsExistingPIN() throws {
+      let app = XCUIApplication()
+      app.launchArguments = ["--ui-test-network=offline", "--ui-test-security-key=connected",
+        "--ui-test-onboarding=required", "--ui-test-identity=\(UUID().uuidString)",
+        "--ui-test-smartcard-default-management", "--ui-test-native-domain-enabled"]
+      launch(app)
+      app.buttons["onboardingContinue"].tap()
+      let pin = app.secureTextFields["onboardingPIN"]
+      XCTAssertTrue(pin.waitForExistence(timeout: 5))
+      XCTAssertFalse(app.buttons["Continue with iPadOS"].exists)
+      XCTAssertFalse(app.secureTextFields["onboardingNewPIN"].exists)
+      pin.tap()
+      pin.typeText("654321")
+      app.buttons["Done"].tap()
+      app.buttons["onboardingContinue"].tap()
+      XCTAssertTrue(app.staticTexts["Confirm this iPad"].waitForExistence(timeout: 5))
+    }
+    func testFactorySmartCardPINConnectsWithoutPINField() throws {
+      let app = XCUIApplication()
+      app.launchArguments = ["--ui-test-network=offline", "--ui-test-security-key=connected",
+        "--ui-test-onboarding=required", "--ui-test-identity=\(UUID().uuidString)",
+        "--ui-test-smartcard-factory-pin"]
+      launch(app)
+      app.buttons["onboardingContinue"].tap()
+      XCTAssertTrue(app.staticTexts["Ready to connect"].waitForExistence(timeout: 5))
+      XCTAssertFalse(app.secureTextFields["onboardingPIN"].exists)
+      XCTAssertTrue(app.buttons["onboardingContinue"].isEnabled)
+      app.buttons["onboardingContinue"].tap()
+      XCTAssertTrue(app.staticTexts["Confirm this iPad"].waitForExistence(timeout: 5))
+      XCTAssertFalse(app.secureTextFields.firstMatch.exists)
+    }
+    func testRejectedFactoryPINAsksOnceForExistingPIN() throws {
+      let app = XCUIApplication()
+      app.launchArguments = ["--ui-test-network=offline", "--ui-test-security-key=connected",
+        "--ui-test-onboarding=required", "--ui-test-identity=\(UUID().uuidString)",
+        "--ui-test-smartcard-factory-pin", "--ui-test-factory-pin-rejected"]
+      launch(app)
+      app.buttons["onboardingContinue"].tap()
+      XCTAssertTrue(app.staticTexts["Ready to connect"].waitForExistence(timeout: 5))
+      app.buttons["onboardingContinue"].tap()
+      let pin = app.secureTextFields["onboardingPIN"]
+      XCTAssertTrue(pin.waitForExistence(timeout: 5))
+      XCTAssertFalse(app.staticTexts["Ready to connect"].exists)
+      XCTAssertFalse(app.buttons["onboardingContinue"].isEnabled)
+      pin.tap()
+      pin.typeText("654321")
+      app.buttons["Done"].tap()
+      app.buttons["onboardingContinue"].tap()
+      XCTAssertTrue(app.staticTexts["Confirm this iPad"].waitForExistence(timeout: 5))
+    }
+    func testOfflineEnrollmentPrefersUSBDespiteConfiguredNativeDomain() throws {
       let app = XCUIApplication()
       app.launchArguments = [
         "--ui-test-network=offline", "--ui-test-security-key=connected",
         "--ui-test-onboarding=required", "--ui-test-identity=\(UUID().uuidString)",
-        "--ui-test-smartcard-unconfigured",
+        "--ui-test-fido2", "--ui-test-native-domain-enabled",
       ]
       launch(app)
       app.buttons["onboardingContinue"].tap()
-      app.buttons["onboardingContinue"].tap()
-      XCTAssertTrue(
-        app.staticTexts["This key needs one-time setup on your Mac"].waitForExistence(timeout: 5))
-      XCTAssertFalse(app.secureTextFields["onboardingPIN"].exists)
+      XCTAssertTrue(app.secureTextFields["onboardingPIN"].waitForExistence(timeout: 5))
+      XCTAssertTrue(app.staticTexts["Use your usual security-key PIN"].exists)
+      XCTAssertFalse(app.buttons["restoreNativeKey"].exists)
       XCTAssertFalse(app.secureTextFields["onboardingNewPIN"].exists)
-      XCTAssertFalse(app.secureTextFields["onboardingManagementKey"].exists)
-      XCTAssertTrue(app.buttons["onboardingContinue"].isEnabled)
-      capture(app, "iPad — Clear legacy key setup")
-      app.buttons["onboardingContinue"].tap()
-      XCTAssertTrue(app.staticTexts["This key needs one-time setup on your Mac"].exists)
+      capture(app, "iPad — Direct USB enrollment default")
+    }
+    func testReadOnlyHardwareKeyDiagnosticNeedsNoPIN() throws {
+      let app = XCUIApplication()
+      app.launchArguments = [
+        "--ui-test-network=offline", "--ui-test-security-key=connected",
+        "--ui-test-onboarding=completed", "--ui-test-open-device", "--ui-test-fido2",
+      ]
+      launch(app)
+      let deviceRow = app.buttons["signer-section-device"]
+      let pill = app.buttons["networkStatus"]
+      XCTAssertLessThanOrEqual(deviceRow.frame.maxY + 8, pill.frame.minY)
+      XCTAssertFalse(app.staticTexts["Local prototype · No real funds"].exists)
+      app.buttons["Diagnostics"].tap()
+      let check = app.buttons["checkHardwareKey"]
+      if !check.isHittable { app.swipeUp() }
+      XCTAssertTrue(check.waitForExistence(timeout: 5))
+      check.tap()
+      XCTAssertTrue(app.buttons["shareKeyDiagnostic"].waitForExistence(timeout: 5))
+      XCTAssertTrue(
+        app.descendants(matching: .any).matching(
+          NSPredicate(format: "label CONTAINS %@", "Simulator fixture")
+        ).firstMatch.exists)
+      XCTAssertTrue(
+        app.descendants(matching: .any).matching(
+          NSPredicate(format: "label CONTAINS %@", "Direct FIDO2")
+        ).firstMatch.exists)
+      XCTAssertFalse(app.secureTextFields.firstMatch.exists)
+      capture(app, "iPad — Read-only USB capability check")
     }
     func testFIDOOnboardingRestoresIdentityAndUsesExistingPIN() throws {
       try completeOnboardingAndSign(usesFIDO: true)
@@ -408,14 +677,9 @@ final class VowUITests: XCTestCase {
         "--ui-test-onboarding=required", "--ui-test-identity=\(UUID().uuidString)",
         "--ui-test-open-device",
       ]
-      if usesFIDO { app.launchArguments.append("--ui-test-fido2") }
+      if usesFIDO { app.launchArguments += ["--ui-test-fido2", "--ui-test-native-domain-enabled"] }
       launch(app)
-      XCTAssertTrue(app.staticTexts["Set up this iPad"].waitForExistence(timeout: 10))
-      let progress = app.descendants(matching: .any)["compactSetupProgress"].firstMatch
-      XCTAssertTrue(progress.exists)
-      XCTAssertLessThanOrEqual(progress.frame.height, 44)
-      capture(app, "iPad — Device enrollment")
-      app.buttons["onboardingContinue"].tap()
+      capture(app, "iPad — Security-key enrollment")
       XCTAssertTrue(app.staticTexts["Connect your security key"].waitForExistence(timeout: 5))
       app.buttons["onboardingContinue"].tap()
       let pin = app.secureTextFields["onboardingPIN"]
@@ -453,19 +717,25 @@ final class VowUITests: XCTestCase {
       XCTAssertEqual(publicKey.count, 66)
       capture(app, "iPad — Verify enrolled keys")
       app.buttons["onboardingContinue"].tap()
+      XCTAssertTrue(app.staticTexts["Profile ready"].waitForExistence(timeout: 10))
+      app.buttons["profileContinue"].tap()
+      openProfileDetails(app)
       XCTAssertTrue(app.staticTexts["devicePublicKey"].waitForExistence(timeout: 10))
       XCTAssertEqual(app.staticTexts["devicePublicKey"].label, publicKey)
-      XCTAssertTrue(app.buttons["shareEnrollment"].exists)
+      XCTAssertTrue(app.buttons["sharePublicProfile"].exists)
       app.terminate()
       launch(app)
+      openProfileDetails(app)
       XCTAssertTrue(app.staticTexts["devicePublicKey"].waitForExistence(timeout: 10))
       XCTAssertEqual(app.staticTexts["devicePublicKey"].label, publicKey)
-      XCTAssertTrue(app.buttons["shareEnrollment"].exists)
+      XCTAssertTrue(app.buttons["sharePublicProfile"].exists)
       XCTAssertFalse(app.staticTexts["Set up this iPad"].exists)
       capture(app, "iPad — Restored signing identity")
+      app.buttons["profileDetailsDone"].tap()
       app.buttons["openProjects"].tap()
       openSampleProject(app)
       app.buttons["Load Sample Request"].tap()
+      chooseSigningProfile(app)
       app.buttons["Review & Approve"].tap()
       app.buttons["Continue"].tap()
       let canvas = app.descendants(matching: .any)["consentCanvas"].firstMatch
@@ -490,6 +760,7 @@ final class VowUITests: XCTestCase {
         "--ui-test-network=offline", "--ui-test-security-key=missing", "--show-sample",
       ]
       launch(app)
+      chooseSigningProfile(app)
       app.buttons["Review & Approve"].tap()
       app.buttons["Continue"].tap()
       for orientation in [UIDeviceOrientation.portrait, .landscapeLeft] {
@@ -506,8 +777,18 @@ final class VowUITests: XCTestCase {
         let canvas = app.descendants(matching: .any)["consentCanvas"].firstMatch
         XCTAssertTrue(left.waitForExistence(timeout: 5))
         XCTAssertTrue(canvas.waitForExistence(timeout: 5))
-        XCTAssertGreaterThan(right.frame.minX, left.frame.maxX)
-        XCTAssertEqual(left.frame.minY, right.frame.minY, accuracy: 3)
+        capture(app, orientation == .portrait ? "iPad — Stacked authorization" : "iPad — Split authorization")
+        if orientation == .portrait {
+          XCTAssertGreaterThan(right.frame.minY, left.frame.maxY)
+          let requestTitle = app.staticTexts["authorizationRequestTitle"]
+          let signatureTitle = app.staticTexts["authorizationSignatureTitle"]
+          XCTAssertEqual(requestTitle.frame.minX, signatureTitle.frame.minX, accuracy: 3)
+          XCTAssertEqual(canvas.frame.minX, requestTitle.frame.minX, accuracy: 3)
+          XCTAssertEqual(canvas.frame.maxX, app.windows.firstMatch.frame.maxX - canvas.frame.minX, accuracy: 3)
+        } else {
+          XCTAssertGreaterThan(right.frame.minX, left.frame.maxX)
+          XCTAssertEqual(left.frame.minY, right.frame.minY, accuracy: 3)
+        }
         XCTAssertGreaterThanOrEqual(canvas.frame.height, 120)
         let footer = app.descendants(matching: .any)["yubiKeyInsertionPrompt"].firstMatch
         XCTAssertLessThanOrEqual(canvas.frame.maxY, footer.frame.minY - 8)
@@ -535,7 +816,7 @@ final class VowUITests: XCTestCase {
           app.windows.firstMatch.frame.width > app.windows.firstMatch.frame.height
         }, evaluatedWith: app)
       waitForExpectations(timeout: 5)
-      assertFooterSeparation(app, action: app.buttons["Review & Approve"])
+      assertFooterSeparation(app, action: app.buttons["Review & Approve"], inline: true)
       capture(app, "iPad — Compact landscape")
     }
   #endif
@@ -661,7 +942,8 @@ final class VowUITests: XCTestCase {
         "-ApplePersistenceIgnoreState", "YES", "-NSQuitAlwaysKeepsWindows", "NO",
       ]
       launch(app)
-      XCTAssertTrue(app.staticTexts["Organization setup"].waitForExistence(timeout: 10))
+      XCTAssertTrue(app.staticTexts["Solana Foundation"].waitForExistence(timeout: 10))
+      app.buttons["Members"].firstMatch.click()
       app.buttons["New Project…"].click()
       let name = app.textFields["workspaceName"]
       XCTAssertTrue(name.waitForExistence(timeout: 5))

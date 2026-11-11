@@ -305,17 +305,17 @@
             session.webView.goBack()
           } label: {
             Image(systemName: "chevron.left")
-          }.help("Back")
+          }.disabled(!session.webView.canGoBack).help("Back").accessibilityLabel("Back")
           Button {
             session.webView.goForward()
           } label: {
             Image(systemName: "chevron.right")
-          }.help("Forward")
+          }.disabled(!session.webView.canGoForward).help("Forward").accessibilityLabel("Forward")
           Button {
             session.webView.reload()
           } label: {
             Image(systemName: "arrow.clockwise")
-          }.help("Reload")
+          }.help("Reload").accessibilityLabel("Reload")
           TextField("Website address", text: $session.address).textFieldStyle(.roundedBorder)
             .onSubmit { session.navigate() }.accessibilityIdentifier("browserAddress")
           Button("Go") { session.navigate() }
@@ -323,13 +323,13 @@
             session.address = "vow-demo://playground"
             session.navigate()
           }
-        }.padding(16)
+        }.buttonStyle(.bordered).controlSize(.regular).padding(.horizontal, 16).padding(
+          .vertical, 10)
         HStack(spacing: 12) {
           Label(model.state?.projectName ?? "Project", systemImage: "folder")
           if let quorum = model.state?.quorum { Text("· \(quorum.policyLabel)") }
           if let chain = model.state?.chain {
-            Text(chain.name).font(.caption.weight(.semibold)).foregroundStyle(
-              chain.id == "solana:mainnet" ? Color.orange : Color.secondary)
+            NetworkBadge(chain: chain.id)
           }
           Spacer()
           Text("Capture preview · No signing or submission").font(.caption)
@@ -344,7 +344,7 @@
       .navigationTitle("Apps")
       .sheet(item: $session.connection, onDismiss: { session.denyConnection() }) { request in
         VStack(alignment: .leading, spacing: 22) {
-          Image(systemName: "globe").font(.system(size: 34)).foregroundStyle(.blue)
+          Image(systemName: "globe").font(.system(size: 34)).foregroundStyle(.tint)
           Text("Connect to this project?").font(.title.bold())
           Text(request.origin).font(.headline).textSelection(.enabled)
           Text(

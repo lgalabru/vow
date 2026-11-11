@@ -108,6 +108,36 @@ pub unsafe extern "C" fn vow_profile_transaction_v1(data: *const u8, len: usize)
     })
 }
 
+/// Explicit Ledger device operation. Does not hold the workspace mutex during device I/O.
+/// # Safety
+/// Input is readable for `len` bytes; free the returned JSON with `vow_string_free_v1`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn vow_ledger_v1(data: *const u8, len: usize) -> *mut c_char {
+    let result = catch_unwind(AssertUnwindSafe(|| -> Result<Value, String> {
+        if data.is_null() || len == 0 || len > 8192 {
+            return Err("Invalid Ledger input size.".into());
+        }
+        // SAFETY: Caller guarantees readable storage, null and length checked above.
+        let request: Value =
+            serde_json::from_slice(unsafe { std::slice::from_raw_parts(data, len) })
+                .map_err(|_| "Invalid Ledger request.")?;
+        #[cfg(target_os = "macos")]
+        {
+            vow_ledger::execute(&request)
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = request;
+            Err("Desktop USB Ledger access is unavailable on iPadOS. Use a supported mobile transport.".into())
+        }
+    }));
+    output(match result {
+        Ok(Ok(data)) => json!({"ok":true,"data":data}),
+        Ok(Err(error)) => json!({"ok":false,"error":error}),
+        Err(_) => json!({"ok":false,"error":"Ledger operation failed. No approval was exported."}),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

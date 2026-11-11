@@ -31,7 +31,7 @@ struct RequestExplanationSheet: View {
               current: explanation == nil && !generating ? 0 : 1
             )
             .frame(maxWidth: .infinity)
-            Image(systemName: "text.bubble").font(.system(size: 34)).foregroundStyle(.blue)
+            Image(systemName: "text.bubble").font(.system(size: 34)).foregroundStyle(.tint)
               .accessibilityHidden(true)
             Text("Transaction analysis").font(.largeTitle.weight(.bold))
             Text("Local analysis of decoded transaction data.").foregroundStyle(.secondary)

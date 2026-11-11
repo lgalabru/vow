@@ -78,7 +78,7 @@ fn check_auth(auth: &[u8], registration: bool) -> Result<(), String> {
         return Err("Native authenticator does not match Vow's relying party.".into());
     }
     if registration {
-        if auth[32] & 0x5d != 0x45 {
+        if auth[32] & 0x7f != 0x45 {
             return Err("Native registration requires PIN verification, touch and a device-bound credential.".into());
         }
     } else if auth.len() != 37 || auth[32] != 0x05 {
@@ -414,5 +414,252 @@ mod tests {
             assert!(!valid_domain(value));
         }
         assert!(valid_domain("vow.example.com"));
+    }
+    fn sign_parts(key: &SigningKey, auth: &[u8], data: &[u8]) -> String {
+        let mut bytes = auth.to_vec();
+        bytes.extend(Sha256::digest(data));
+        let signature: Signature = key.sign(&bytes);
+        hex::encode(signature.to_bytes())
+    }
+
+    #[test]
+    fn every_single_bit_change_in_a_valid_native_proof_is_rejected() {
+        let key = SigningKey::from_slice(&[31; 32]).unwrap();
+        let public = hex::encode(key.verifying_key().to_encoded_point(true));
+        let message = b"specific request, consent and session";
+        let (signature, auth, data) = assertion(
+            &key,
+            message,
+            5,
+            &format!("https://{}", rp_id().unwrap()),
+            "webauthn.get",
+        );
+        let original = [
+            message.to_vec(),
+            hex::decode(&signature).unwrap(),
+            hex::decode(&auth).unwrap(),
+            hex::decode(&data).unwrap(),
+        ];
+        for component in 0..original.len() {
+            for position in 0..original[component].len() {
+                for bit in 0..8 {
+                    let mut changed = original.clone();
+                    changed[component][position] ^= 1 << bit;
+                    assert!(
+                        verify_assertion(
+                            &public,
+                            &changed[0],
+                            &hex::encode(&changed[1]),
+                            &hex::encode(&changed[2]),
+                            &hex::encode(&changed[3])
+                        )
+                        .is_err(),
+                        "accepted mutation of component {component}, byte {position}, bit {bit}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn correctly_signed_assertions_still_require_exact_flags_and_client_semantics() {
+        let key = SigningKey::from_slice(&[32; 32]).unwrap();
+        let public = hex::encode(key.verifying_key().to_encoded_point(true));
+        let message = b"Vow approval";
+        let origin = format!("https://{}", rp_id().unwrap());
+        let (_, auth_hex, data_hex) = assertion(&key, message, 5, &origin, "webauthn.get");
+        let auth = hex::decode(auth_hex).unwrap();
+        let data = hex::decode(data_hex).unwrap();
+        for flags in 0..=255u8 {
+            let mut changed = auth.clone();
+            changed[32] = flags;
+            let signature = sign_parts(&key, &changed, &data);
+            assert_eq!(
+                verify_assertion(
+                    &public,
+                    message,
+                    &signature,
+                    &hex::encode(changed),
+                    &hex::encode(&data)
+                )
+                .is_ok(),
+                flags == 5
+            );
+        }
+        let value: Value = serde_json::from_slice(&data).unwrap();
+        for (field, wrong) in [
+            ("crossOrigin", json!(true)),
+            ("type", json!("webauthn.create")),
+            ("origin", json!(format!("{origin}/"))),
+            ("origin", json!(format!("{origin}:443"))),
+            ("origin", json!(origin.replace("https:", "http:"))),
+            ("challenge", json!(URL_SAFE_NO_PAD.encode([0u8; 32]))),
+            ("challenge", json!(123)),
+            ("crossOrigin", json!("false")),
+            ("unexpected", json!(true)),
+        ] {
+            let mut changed = value.clone();
+            changed[field] = wrong;
+            let data = serde_json::to_vec(&changed).unwrap();
+            let signature = sign_parts(&key, &auth, &data);
+            assert!(
+                verify_assertion(
+                    &public,
+                    message,
+                    &signature,
+                    &hex::encode(&auth),
+                    &hex::encode(data)
+                )
+                .is_err(),
+                "accepted invalid {field}"
+            );
+        }
+        // Equivalent JSON is valid only when the authenticator signed those exact bytes.
+        let pretty = serde_json::to_vec_pretty(&value).unwrap();
+        assert!(
+            verify_assertion(
+                &public,
+                message,
+                &sign_parts(&key, &auth, &pretty),
+                &hex::encode(&auth),
+                &hex::encode(pretty)
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn malformed_signature_key_and_proof_lengths_fail_closed() {
+        let key = SigningKey::from_slice(&[33; 32]).unwrap();
+        let public = hex::encode(key.verifying_key().to_encoded_point(true));
+        let (signature, auth, data) = assertion(
+            &key,
+            b"request",
+            5,
+            &format!("https://{}", rp_id().unwrap()),
+            "webauthn.get",
+        );
+        for invalid in [
+            String::new(),
+            "00".repeat(64),
+            "ff".repeat(64),
+            signature[..126].into(),
+            signature.clone() + "00",
+            "zz".repeat(64),
+        ] {
+            assert!(verify_assertion(&public, b"request", &invalid, &auth, &data).is_err());
+        }
+        for invalid in [
+            String::new(),
+            "00".repeat(33),
+            "02".into(),
+            public.to_uppercase(),
+            hex::encode(key.verifying_key().to_encoded_point(false)),
+        ] {
+            assert!(verify_assertion(&invalid, b"request", &signature, &auth, &data).is_err());
+        }
+        for invalid in [
+            String::new(),
+            auth[..72].into(),
+            auth.clone() + "00",
+            "zz".repeat(37),
+        ] {
+            assert!(verify_assertion(&public, b"request", &signature, &invalid, &data).is_err());
+        }
+        for invalid in [String::new(), "00".repeat(4097), "zz".into(), "f".into()] {
+            assert!(verify_assertion(&public, b"request", &signature, &auth, &invalid).is_err());
+        }
+    }
+
+    #[test]
+    fn registration_rejects_reserved_flags_and_every_truncated_attestation() {
+        let key = SigningKey::from_slice(&[34; 32]).unwrap();
+        let public = hex::encode(key.verifying_key().to_encoded_point(true));
+        let challenge = registration_challenge(&json!({"device_public_key":public})).unwrap();
+        let fixture = registration_fixture(&json!({"public_key":public,"challenge_hex":challenge["challenge_hex"],"credential_id":"aabbcc"})).unwrap();
+        let bytes = hex::decode(fixture["attestation_object_hex"].as_str().unwrap()).unwrap();
+        let mut request = json!({"challenge_hex":challenge["challenge_hex"],"credential_id":"aabbcc","client_data_json_hex":fixture["client_data_json_hex"],"attestation_object_hex":fixture["attestation_object_hex"]});
+        for length in 0..bytes.len() {
+            request["attestation_object_hex"] = json!(hex::encode(&bytes[..length]));
+            assert!(
+                parse_registration(&request).is_err(),
+                "accepted truncation at {length}"
+            );
+        }
+        let mut auth = Sha256::digest(rp_id().unwrap().as_bytes()).to_vec();
+        auth.extend([0, 0, 0, 0, 0]);
+        for flags in 0..=255u8 {
+            auth[32] = flags;
+            assert_eq!(
+                check_auth(&auth, true).is_ok(),
+                flags == 0x45 || flags == 0xc5
+            );
+        }
+    }
+
+    #[test]
+    fn native_enrollment_rejects_tampering_of_either_proof_and_every_bound_field() {
+        let device = SigningKey::from_slice(&[35; 32]).unwrap();
+        let security = SigningKey::from_slice(&[36; 32]).unwrap();
+        let request = json!({"device_public_key":hex::encode(device.verifying_key().to_encoded_point(true)),"security_key_public_key":hex::encode(security.verifying_key().to_encoded_point(true)),"key_source":"secure_enclave","security_key_kind":"webauthn","credential_id":"aabbcc"});
+        let prepared = identity::prepare(&request).unwrap();
+        let message = hex::decode(prepared["message_hex"].as_str().unwrap()).unwrap();
+        let ds: Signature = device.sign(&message);
+        let (signature, auth, data) = assertion(
+            &security,
+            &message,
+            5,
+            &format!("https://{}", rp_id().unwrap()),
+            "webauthn.get",
+        );
+        let proof = json!({"message_hex":prepared["message_hex"],"device_signature":hex::encode(ds.to_bytes()),"security_key_signature":signature,"security_key_authenticator_data":auth,"security_key_client_data_json":data});
+        assert!(identity::verify(&proof).is_ok());
+        for field in [
+            "device_signature",
+            "security_key_signature",
+            "security_key_authenticator_data",
+            "security_key_client_data_json",
+        ] {
+            let mut changed = proof.clone();
+            changed.as_object_mut().unwrap().remove(field);
+            assert!(identity::verify(&changed).is_err());
+            let mut changed = proof.clone();
+            let mut bytes = hex::decode(changed[field].as_str().unwrap()).unwrap();
+            bytes[0] ^= 1;
+            changed[field] = json!(hex::encode(bytes));
+            assert!(identity::verify(&changed).is_err());
+        }
+        let original: Value = serde_json::from_slice(&message).unwrap();
+        for (field, value) in [
+            ("nonce", json!("00".repeat(32))),
+            ("rp_id", json!("other.example")),
+            ("credential_id", json!("dd")),
+            ("key_source", json!("simulator_software")),
+            ("security_key_kind", json!("piv")),
+            ("pin_policy", json!("never")),
+            ("touch_policy", json!("never")),
+            ("purpose", json!("approve")),
+            (
+                "device_public_key",
+                request["security_key_public_key"].clone(),
+            ),
+            (
+                "security_key_public_key",
+                request["device_public_key"].clone(),
+            ),
+        ] {
+            let mut changed = original.clone();
+            changed[field] = value;
+            let mut candidate = proof.clone();
+            candidate["message_hex"] = json!(hex::encode(crate::canonical_bytes(&changed)));
+            assert!(
+                identity::verify(&candidate).is_err(),
+                "accepted changed {field}"
+            );
+        }
+        assert_ne!(
+            identity::prepare(&request).unwrap()["message_hex"],
+            prepared["message_hex"]
+        );
     }
 }
