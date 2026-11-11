@@ -57,3 +57,17 @@ web-build:
 
 web-test:
     pnpm --dir apps/web test
+
+# Portable signature verification, enrollment, replay protection and C ABI tests.
+crypto-test:
+    cargo +stable test --locked -p vow-core -p vow-ffi -p vow-ledger --lib
+
+crypto-lint:
+    cargo +stable clippy --locked -p vow-core -p vow-ffi -p vow-ledger --all-targets -- -D warnings
+
+crypto-fmt:
+    cargo +stable fmt --all -- --check
+
+# Exact envelope conformance against the PR-pinned desktop Ledger backend; no hardware I/O.
+ledger-test:
+    cargo +stable test --locked -p vow-ledger --lib
