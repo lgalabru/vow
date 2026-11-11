@@ -150,7 +150,7 @@ export function MacCompanion() {
       <Reveal className="heading">
         <p className="tag">Mac companion</p>
         <h2 id="mac-heading">
-          The ceremony
+          The setup ceremony
           <br />
           happens on the Mac.
         </h2>

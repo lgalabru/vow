@@ -12,7 +12,7 @@ test('landing page presents the product without signing anything', async ({ page
   await expect(page.getByRole('img', { name: 'Squads' })).toBeVisible();
   await page.locator('#mac').scrollIntoViewIfNeeded();
   await expect(
-    page.getByRole('heading', { name: 'The ceremony happens on the Mac.' }),
+    page.getByRole('heading', { name: 'The setup ceremony happens on the Mac.' }),
   ).toBeVisible();
   await expect(
     page.getByText('Illustration with sample data. No signing keys are used.'),
