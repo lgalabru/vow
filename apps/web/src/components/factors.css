@@ -65,6 +65,9 @@
 .fx-pin {
   position: sticky;
   top: 0;
+  /* The security key waits past the right edge. Clip it here, so it never
+     widens the page: a phone would otherwise scroll sideways to reach it. */
+  overflow-x: clip;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -156,6 +159,13 @@
   border-radius: 3px;
   background: var(--green);
   transform-origin: left;
+}
+
+/* Browsers without overflow: clip */
+@supports not (overflow: clip) {
+  .fx-pin {
+    overflow: hidden;
+  }
 }
 
 /* ---- The device, its key and its top button ---- */
