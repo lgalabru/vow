@@ -1,6 +1,6 @@
 'use client';
 
-import { BadgeCheck, BatteryFull, Fingerprint, KeyRound, Lock, Wifi, WifiOff } from 'lucide-react';
+import { BadgeCheck, BatteryFull, Fingerprint, KeyRound, WifiOff } from 'lucide-react';
 import {
   MotionConfig,
   motion,
@@ -14,51 +14,36 @@ import { useRef, useState } from 'react';
 import { Check } from '../stageshow/kit/parts/Check';
 import { Spinner } from '../stageshow/kit/parts/Spinner';
 import { Stage } from '../stageshow/kit/stage';
+import { Bento } from './bento';
 import { IPadFrame } from './device';
 import { MacCompanion } from './mac';
-import { Closing, Footer, Header, Questions } from './site';
-import { SquadsLogo } from './squads';
+import { Closing, Footer, Header, Questions, Reveal } from './site';
 import './factors.css';
 
-// The iPad app's story, written before it was built. One tall section, one
-// pinned iPad, and the page's scroll is the clock:
+// The story, written before it was built. One tall section, one pinned iPad,
+// and the page's scroll is the clock:
 //
 //   Scroll     Chapter           On the iPad                   Around it
-//   0.00-0.16  Enforced offline  locked, then unlocked         -
-//   0.16-0.30  The request       amount, source, destination   -
-//   0.30-0.48  Factor 1, hand    the signature draws           -
-//   0.48-0.66  Factor 2, key     "Touch your security key"     the key slides into the port
-//   0.66-0.84  Factor 3, finger  "Confirm with Touch ID"       the top button lights
+//   0.00-0.30  Factor 1, hand    the signature draws           -
+//   0.30-0.58  Factor 2, key     "Touch your security key"     the key slides into the port
+//   0.58-0.84  Factor 3, finger  "Confirm with Touch ID"       the top button lights
 //   0.84-1.00  Approval ready    three ticks, the seal         -
 //
 // Three layers move at their own speed: the copy, the iPad and the security key.
 
 const AT = {
-  offline: 0.08,
-  review: 0.16,
-  sign: 0.3,
-  signStart: 0.33,
-  signEnd: 0.44,
-  signed: 0.455,
-  key: 0.48,
-  plugged: 0.56,
-  keyed: 0.62,
-  touch: 0.66,
-  touched: 0.77,
+  signStart: 0.05,
+  signEnd: 0.24,
+  signed: 0.26,
+  key: 0.3,
+  plugged: 0.44,
+  keyed: 0.52,
+  touch: 0.58,
+  touched: 0.74,
   ready: 0.84,
 };
 
 const chapters = [
-  {
-    kicker: 'Enforced offline',
-    title: 'Offline, or it stays locked.',
-    body: 'Vow turns the iPad into a dedicated offline signer. While any network is reachable, approval is locked. Disconnect, and it unlocks by itself.',
-  },
-  {
-    kicker: 'The request',
-    title: 'Read what you approve.',
-    body: 'Requests arrive as files. The iPad shows what the transaction does, who pays whom and how much, before it asks you for anything.',
-  },
   {
     kicker: 'Factor 1 · Your hand',
     title: 'Sign it yourself.',
@@ -83,18 +68,15 @@ const chapters = [
 
 const factors = ['Signature', 'Security key', 'Touch ID'];
 
-/** The progress rail: one segment per step, filled over the stretch of scroll it covers. */
+/** The progress rail: one segment per factor, filled over the stretch of scroll it covers. */
 const rail: { label: string; from: number; to: number }[] = [
-  { label: 'Offline', from: 0.02, to: AT.offline },
-  { label: 'Review', from: AT.review, to: AT.sign },
-  { label: 'Sign', from: AT.signStart, to: AT.signed },
-  { label: 'Key', from: AT.key, to: AT.keyed },
+  { label: 'Signature', from: AT.signStart, to: AT.signed },
+  { label: 'Security key', from: AT.key, to: AT.keyed },
   { label: 'Touch ID', from: AT.touch, to: AT.touched },
 ];
 
 type Moment = {
   chapter: number;
-  offline: boolean;
   signed: boolean;
   keyIn: boolean;
   plugged: boolean;
@@ -103,9 +85,7 @@ type Moment = {
 };
 
 const momentAt = (p: number): Moment => ({
-  chapter:
-    p < AT.review ? 0 : p < AT.sign ? 1 : p < AT.key ? 2 : p < AT.touch ? 3 : p < AT.ready ? 4 : 5,
-  offline: p >= AT.offline,
+  chapter: p < AT.key ? 0 : p < AT.touch ? 1 : p < AT.ready ? 2 : 3,
   signed: p >= AT.signed,
   keyIn: p >= AT.key - 0.03,
   plugged: p >= AT.plugged,
@@ -119,60 +99,18 @@ const same = (a: Moment, b: Moment) =>
 const on = (value: boolean) => (value ? '' : undefined);
 
 function Screen({ moment, ink }: { moment: Moment; ink: MotionValue<number> }) {
-  const { chapter, offline, signed, plugged, keyed, touched } = moment;
+  const { chapter, signed, plugged, keyed, touched } = moment;
   return (
     <div className="fx-screen">
       <div className="fx-status">
         <span>9:41</span>
-        <span className="fx-status-title">{chapter < 2 ? 'Requests' : 'Your approval'}</span>
+        <span className="fx-status-title">Your approval</span>
         <BatteryFull size={20} strokeWidth={1.6} />
       </div>
 
       <div className="fx-body">
         <div className="fx-focus">
           <div className="fx-view" data-show={on(chapter === 0)}>
-            <span className="fx-disc" data-on={on(offline)}>
-              {offline ? (
-                <WifiOff size={30} strokeWidth={1.6} />
-              ) : (
-                <Lock size={30} strokeWidth={1.6} />
-              )}
-            </span>
-            <div className="fx-prompt">
-              {offline ? 'Offline. Ready to approve' : 'Approval is locked'}
-            </div>
-            <span className="fx-hint" data-show>
-              {offline
-                ? 'No network path is available'
-                : 'Disconnect Wi-Fi and Ethernet to use Vow'}
-            </span>
-          </div>
-          <div className="fx-view" data-show={on(chapter === 1)}>
-            <div className="fx-card">
-              <div className="fx-card-meta">Sample request</div>
-              <div className="fx-card-title">Contributor grants</div>
-              <div className="fx-card-meta">November grants for open-source contributors.</div>
-              <div className="fx-card-lines">
-                <div>
-                  <span>Amount</span>
-                  <b>12,500.00 USDC</b>
-                </div>
-                <div>
-                  <span>From</span>
-                  <b>Treasury</b>
-                </div>
-                <div>
-                  <span>To</span>
-                  <b>Grants</b>
-                </div>
-                <div>
-                  <span>Approvals needed</span>
-                  <b>2 of 3</b>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="fx-view" data-show={on(chapter === 2)}>
             <div className="fx-pad">
               <span className="fx-pad-what">Contributor grants · 12,500.00 USDC</span>
               <svg viewBox="10 6 230 72">
@@ -183,7 +121,7 @@ function Screen({ moment, ink }: { moment: Moment; ink: MotionValue<number> }) {
               </svg>
             </div>
           </div>
-          <div className="fx-view" data-show={on(chapter === 3)}>
+          <div className="fx-view" data-show={on(chapter === 1)}>
             <span className="fx-disc" data-on={on(keyed)}>
               <KeyRound size={30} strokeWidth={1.6} />
             </span>
@@ -198,7 +136,7 @@ function Screen({ moment, ink }: { moment: Moment; ink: MotionValue<number> }) {
               <Spinner size={16} />
             </span>
           </div>
-          <div className="fx-view" data-show={on(chapter === 4)}>
+          <div className="fx-view" data-show={on(chapter === 2)}>
             <span className="fx-disc" data-on={on(touched)}>
               <Fingerprint size={32} strokeWidth={1.5} />
             </span>
@@ -209,7 +147,7 @@ function Screen({ moment, ink }: { moment: Moment; ink: MotionValue<number> }) {
               Rest your finger on the top button
             </span>
           </div>
-          <div className="fx-view" data-show={on(chapter === 5)}>
+          <div className="fx-view" data-show={on(chapter === 3)}>
             <BadgeCheck className="fx-seal" size={56} strokeWidth={1.5} />
             <div className="fx-prompt fx-prompt--large">Approval ready</div>
             <span className="fx-hint" data-show>
@@ -220,13 +158,13 @@ function Screen({ moment, ink }: { moment: Moment; ink: MotionValue<number> }) {
 
         <div className="fx-side">
           {/* The connection status never leaves the screen */}
-          <div className="fx-network" data-offline={on(offline)}>
+          <div className="fx-network" data-offline>
             <span className="fx-network-glyph">
-              {offline ? <WifiOff size={16} strokeWidth={2} /> : <Wifi size={16} strokeWidth={2} />}
+              <WifiOff size={16} strokeWidth={2} />
             </span>
             <span>
-              <b>{offline ? 'Offline' : 'Wi-Fi connected'}</b>
-              <span>{offline ? 'Ready to approve' : 'Approval locked'}</span>
+              <b>Offline</b>
+              <span>Ready to approve</span>
             </span>
           </div>
           <div className="fx-list">
@@ -235,7 +173,7 @@ function Screen({ moment, ink }: { moment: Moment; ink: MotionValue<number> }) {
               return (
                 <div key={label} className="fx-row" data-done={on(done)}>
                   <span>{label}</span>
-                  <Check on={done} pending={chapter === index + 2} size={20} />
+                  <Check on={done} pending={chapter === index} size={20} />
                 </div>
               );
             })}
@@ -285,7 +223,7 @@ function Story() {
   return (
     <section ref={ref} className="fx-story" id="ipad" aria-labelledby="story-heading">
       <h2 id="story-heading" className="fx-sr">
-        The iPad app: an offline approval with 3-factor authentication
+        3-factor authentication on the iPad, step by step
       </h2>
       <div className="fx-pin">
         <div className="fx-copy">
@@ -302,12 +240,12 @@ function Story() {
 
         <motion.div className="fx-device" style={reduced ? undefined : { y: deviceY }}>
           <IPadFrame
-            label="An iPad mini running Vow. Approval unlocks once the iPad is offline, then a sample request collects a handwritten signature, a security key touch and Touch ID."
+            label="An iPad mini running Vow, offline. A sample request collects a handwritten signature, a security key touch and Touch ID."
             around={
               <>
                 <span
                   className="fx-touch"
-                  data-show={on(chapter === 4)}
+                  data-show={on(chapter === 2)}
                   data-done={on(moment.touched)}
                 />
                 <motion.span
@@ -366,9 +304,6 @@ function Hero() {
             </li>
           ))}
         </ul>
-        <p className="fx-squads">
-          Designed for <SquadsLogo height={17} /> multisig
-        </p>
       </motion.div>
     </section>
   );
@@ -376,11 +311,12 @@ function Hero() {
 
 const links = [
   { href: '#ipad', label: 'iPad' },
+  { href: '#features', label: 'Features' },
   { href: '#mac', label: 'Mac' },
   { href: '#questions', label: 'Questions' },
 ];
 
-/** A second direction for the landing page: the iPad app told as one offline approval. */
+/** The public product page, with no account collection or third-party analytics. */
 export function FactorsSite({ stars }: { stars?: number | null }) {
   return (
     <MotionConfig reducedMotion="user">
@@ -389,6 +325,20 @@ export function FactorsSite({ stars }: { stars?: number | null }) {
         <Hero />
         <Story />
         <p className="fx-note shell">Illustration with sample data. No signing keys are used.</p>
+        <section className="section shell" id="features" aria-labelledby="features-heading">
+          <Reveal className="heading">
+            <h2 id="features-heading">
+              Built for one decision
+              <br />
+              at a time.
+            </h2>
+            <p>
+              A browser is a busy place. Vow gives the request, your consent and your keys a device
+              of their own.
+            </p>
+          </Reveal>
+          <Bento />
+        </section>
         <MacCompanion />
         <Questions />
         <Closing />

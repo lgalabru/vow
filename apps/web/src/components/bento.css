@@ -14,23 +14,26 @@
     display: grid;
     gap: var(--gap);
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: 400px 340px 360px 360px 360px;
-    grid-template-areas: 'offline' 'quorum' 'team' 'file' 'proofs';
+    grid-template-rows: 400px 340px 300px 400px 360px 380px;
+    grid-template-areas: 'offline' 'quorum' 'squads' 'review' 'file' 'team';
   }
 
   @container (min-width: 620px) {
     & .vb-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      grid-template-rows: 400px 360px 360px;
-      grid-template-areas: 'offline offline' 'quorum team' 'file proofs';
+      grid-template-rows: 400px 340px 400px 380px;
+      grid-template-areas: 'offline offline' 'quorum squads' 'review review' 'file team';
     }
   }
 
   @container (min-width: 940px) {
     & .vb-grid {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      grid-template-rows: 400px 380px;
-      grid-template-areas: 'offline offline quorum' 'team file proofs';
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      grid-template-rows: 400px 400px 380px;
+      grid-template-areas:
+        'offline offline offline offline quorum quorum'
+        'squads squads review review review review'
+        'file file file team team team';
     }
   }
 
@@ -59,8 +62,11 @@
   & .vb-tile--file {
     grid-area: file;
   }
-  & .vb-tile--proofs {
-    grid-area: proofs;
+  & .vb-tile--squads {
+    grid-area: squads;
+  }
+  & .vb-tile--review {
+    grid-area: review;
   }
 
   & .vb-tile[data-dark] {
@@ -301,49 +307,54 @@
     font-size: 13px;
   }
 
-  /* ---- Proofs: two keys, one approval ---- */
+  /* ---- Squads: a statement, the mark in the tile's foot ---- */
 
-  & .vb-proofs {
+  & .vb-squads {
     position: absolute;
-    inset: 0 0 var(--pad);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 18px;
-  }
-
-  & .vb-proof-slot {
-    position: relative;
-  }
-
-  & .vb-proof {
-    display: grid;
-    place-items: center;
-    width: 104px;
-    height: 104px;
-    border-radius: 50%;
-    background: #fff;
-    box-shadow:
-      0 0 0 1px rgba(0, 0, 0, 0.03),
-      0 12px 30px -14px rgba(20, 20, 30, 0.2);
+    left: var(--pad);
+    bottom: var(--pad);
     color: var(--ink);
+    line-height: 0;
   }
 
-  & .vb-proof-check {
-    position: absolute;
-    right: 2px;
-    bottom: 2px;
-    border-radius: 50%;
-    background: #fff;
-    box-shadow: 0 0 0 3px #fff;
+  /* ---- Review: one request ---- */
+
+  & .vb-tile--review .vb-copy {
+    max-width: 520px;
   }
 
-  & .vb-proof-slot:last-child .vb-proof-check * {
-    transition-delay: 160ms;
+  & .vb-request {
+    padding: 12px;
+    border-radius: 28px;
   }
 
-  & .vb-proof-plus {
-    color: #b4b4b9;
+  & .vb-request-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 14px 14px;
+    white-space: nowrap;
+  }
+
+  & .vb-request-head .vb-name {
+    font-size: 19px;
+    font-weight: 600;
+  }
+
+  & .vb-amount {
+    font-size: 19px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  & .vb-name--quiet {
+    color: #8a8a8e;
+    font-weight: 400;
+  }
+
+  & .vb-request .ss-row {
+    box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.06);
   }
 
   /* A phone column: the offline panel at the size of the other tiles' panels */

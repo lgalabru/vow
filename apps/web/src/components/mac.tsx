@@ -28,7 +28,7 @@ const points = [
   },
   {
     title: 'Keys in the Secure Enclave.',
-    body: 'The Mac holds its own key in the macOS Secure Enclave, so the ceremony record is signed by hardware and the key cannot be copied off.',
+    body: 'On Mac as on iPad, Vow’s device key is created in the Secure Enclave. It can sign, and it cannot be copied off.',
   },
   {
     title: 'One fingerprint to compare.',

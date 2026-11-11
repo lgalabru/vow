@@ -1,5 +1,4 @@
 import { FactorsSite } from '../components/factors';
-import { Site } from '../components/site';
 
 /**
  * The repository's star count, read on the server at most once an hour so the
@@ -21,15 +20,7 @@ async function repositoryStars(): Promise<number | null> {
   }
 }
 
-/**
- * Vow's public landing page. While two directions are being compared,
- * VOW_SITE_VARIANT=factors serves the three-factor narrative instead.
- */
+/** Vow's public landing page. */
 export default async function Page() {
-  const stars = await repositoryStars();
-  return process.env.VOW_SITE_VARIANT === 'factors' ? (
-    <FactorsSite stars={stars} />
-  ) : (
-    <Site stars={stars} />
-  );
+  return <FactorsSite stars={await repositoryStars()} />;
 }

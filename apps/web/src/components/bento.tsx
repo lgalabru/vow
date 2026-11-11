@@ -1,6 +1,6 @@
 'use client';
 
-import { FileCheck2, Fingerprint, KeyRound, Lock, Plus, Wifi } from 'lucide-react';
+import { FileCheck2, Lock, Wifi } from 'lucide-react';
 import { motion, useReducedMotion, useScroll, useTransform } from 'motion/react';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { Act } from '../stageshow/kit/act';
@@ -12,20 +12,23 @@ import { Check } from '../stageshow/kit/parts/Check';
 import { Icon } from '../stageshow/kit/parts/Icon';
 import { Row } from '../stageshow/kit/parts/Row';
 import { Stage } from '../stageshow/kit/stage';
+import { SquadsLogo } from './squads';
 import { Bar } from '../stageshow/kit/window';
 import './bento.css';
 
 // The tile list, written before any tile was built (Stageshow, bento.md):
 //
 //   Tile     Span   Kind       The one thing                      Moves
-//   Offline  2 x 1  Hero UI    Wi-Fi goes off, approval unlocks   the switch, then the status
-//   Quorum   1 x 1  Stat       2 of 3, on the one dark tile       the arc draws in
-//   Team     1 x 1  Component  three members, one still pending   a second tick lands
-//   File     1 x 1  Object     the approval as a file             rises out of the crop
-//   Proofs   1 x 1  Diagram    device key plus security key       both confirm
+//   Offline  4 x 1  Hero UI    Wi-Fi goes off, approval unlocks   the switch, then the status
+//   Quorum   2 x 1  Stat       2 of 3, on the one dark tile       the arc draws in
+//   Squads   2 x 1  Statement  the Squads mark                    -
+//   Review   4 x 1  Component  one request, decoded               -
+//   File     3 x 1  Object     the approval as a file             rises out of the crop
+//   Team     3 x 1  Component  three members, one still pending   a second tick lands
 //
-// Each picture is its own Stage at 1:1 and plays one beat, once, as the grid
-// scrolls in, in reading order.
+// Six columns, so the rows split 4/2, 2/4 and 3/3 and no two rows share a
+// seam. Each picture is its own Stage at 1:1; the ones that move play one
+// beat, once, as the grid scrolls in.
 
 const STEP = 110;
 const LEAD = 450;
@@ -37,7 +40,7 @@ const beat = (index: number) => async (a: Act<Beat>) => {
   await a.wait(LEAD + index * STEP);
   await a.set({ on: true });
 };
-const scripts = [0, 1, 2, 3, 4].map(beat);
+const scripts = [0, 1, 2, 3, 4, 5].map(beat);
 
 const on = (value: boolean) => (value ? '' : undefined);
 
@@ -232,7 +235,7 @@ function Team() {
   return (
     <Tile
       area="team"
-      drift={40}
+      drift={72}
       lead="Everyone signs for themselves."
       picture={
         <div ref={picture} className="vb-picture" aria-hidden>
@@ -274,7 +277,7 @@ function File() {
   return (
     <Tile
       area="file"
-      drift={96}
+      drift={40}
       lead="Moves as a file."
       picture={
         <div className="vb-picture vb-picture--center" aria-hidden>
@@ -306,59 +309,70 @@ function File() {
   );
 }
 
-function Proofs() {
+function Squads() {
   return (
     <Tile
-      area="proofs"
-      drift={64}
-      lead="Two proofs, every time."
+      area="squads"
+      drift={40}
+      lead="Designed for Squads multisig."
       picture={
-        <div className="vb-picture vb-picture--center" aria-hidden>
-          <Stage<Beat>
-            width={360}
-            height={216}
-            initial={before}
-            poster={after}
-            play="once"
-            script={scripts[4]}
-            className="vb-stage"
-          >
-            {(scene) => (
-              <div className="vb-proofs" data-on={on(scene.on)}>
-                <span className="vb-proof-slot">
-                  <span className="vb-proof">
-                    <Fingerprint size={34} strokeWidth={1.6} />
-                  </span>
-                  <Check on={scene.on} size={24} className="vb-proof-check" />
-                </span>
-                <Plus size={20} strokeWidth={2} className="vb-proof-plus" />
-                <span className="vb-proof-slot">
-                  <span className="vb-proof">
-                    <KeyRound size={34} strokeWidth={1.6} />
-                  </span>
-                  <Check on={scene.on} size={24} className="vb-proof-check" />
-                </span>
-              </div>
-            )}
-          </Stage>
-        </div>
+        <span className="vb-squads">
+          <SquadsLogo height={34} />
+        </span>
       }
     >
-      Your iPad&rsquo;s protected key, and a security key you touch.
+      Approvals are shaped for Squads proposals. The on-chain adapter is still in development.
     </Tile>
   );
 }
 
-/** The features grid: five tiles, hero and strip. */
+function Review() {
+  const [picture, width] = usePictureWidth();
+  return (
+    <Tile
+      area="review"
+      drift={72}
+      lead="Read what you approve."
+      picture={
+        <div ref={picture} className="vb-picture" aria-hidden>
+          {width > 0 && (
+            <Stage width={width} height={236} className="vb-stage">
+              {() => (
+                <div className="vb-panel vb-request">
+                  <div className="vb-request-head">
+                    <span className="vb-name">Contributor grants</span>
+                    <span className="vb-amount">12,500.00 USDC</span>
+                  </div>
+                  <Row title={<span className="vb-name vb-name--quiet">From</span>} pad={14}>
+                    <span className="vb-name">Treasury</span>
+                  </Row>
+                  <Row title={<span className="vb-name vb-name--quiet">To</span>} pad={14}>
+                    <span className="vb-name">Grants</span>
+                  </Row>
+                </div>
+              )}
+            </Stage>
+          )}
+        </div>
+      }
+    >
+      Requests arrive as files. The iPad shows who pays whom, and how much, before it asks you for
+      anything.
+    </Tile>
+  );
+}
+
+/** The features grid: six tiles of three sizes. */
 export function Bento() {
   return (
     <div className="vb">
       <div className="vb-grid">
         <Offline />
         <Quorum />
-        <Team />
+        <Squads />
+        <Review />
         <File />
-        <Proofs />
+        <Team />
       </div>
     </div>
   );

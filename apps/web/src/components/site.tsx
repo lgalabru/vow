@@ -1,32 +1,9 @@
 'use client';
 
-import { ArrowRight, ChevronDown, Github, KeyRound, Laptop, PenLine, Star } from 'lucide-react';
-import { MotionConfig, motion, useScroll, useTransform } from 'motion/react';
+import { ChevronDown, Github, Star } from 'lucide-react';
+import { motion } from 'motion/react';
 import Image from 'next/image';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Bento } from './bento';
-import { Device } from './device';
-
-const steps = [
-  {
-    icon: Laptop,
-    title: 'Set the team up on Mac.',
-    body: 'Enroll members in person. Organize projects. Choose the people and threshold for each quorum.',
-    device: 'The ceremony companion',
-  },
-  {
-    icon: PenLine,
-    title: 'Review on your iPad.',
-    body: 'Import the request, inspect the details, and record your consent on a screen that does nothing else.',
-    device: 'Your offline approval device',
-  },
-  {
-    icon: KeyRound,
-    title: 'Authorize. Then share.',
-    body: 'Use your registered security key and iPad authentication. Export the approval for your team to collect.',
-    device: 'A portable signed approval',
-  },
-];
+import { type ReactNode } from 'react';
 
 const questions = [
   {
@@ -61,19 +38,6 @@ const questions = [
   },
 ];
 
-/** True below the width where the landscape iPad's text stops being readable. */
-function useNarrow() {
-  const [narrow, setNarrow] = useState(false);
-  useEffect(() => {
-    const query = window.matchMedia('(max-width: 760px)');
-    const update = () => setNarrow(query.matches);
-    update();
-    query.addEventListener('change', update);
-    return () => query.removeEventListener('change', update);
-  }, []);
-  return narrow;
-}
-
 /** A block that rises into place the first time it scrolls into view. */
 export function Reveal({
   children,
@@ -94,44 +58,6 @@ export function Reveal({
     >
       {children}
     </motion.div>
-  );
-}
-
-function Hero() {
-  const ref = useRef<HTMLElement>(null);
-  const narrow = useNarrow();
-  const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end start'] });
-  // The copy falls behind the scroll and fades; the iPad rises to meet it.
-  const copyY = useTransform(scrollYProgress, [0, 1], [0, 180]);
-  const copyOpacity = useTransform(scrollYProgress, [0, 0.55], [1, 0]);
-  const deviceY = useTransform(scrollYProgress, [0, 1], [0, -150]);
-  return (
-    <section ref={ref} className="hero" aria-labelledby="hero-heading">
-      <motion.div className="hero-copy shell" style={{ y: copyY, opacity: copyOpacity }}>
-        <p className="tag">For iPad and Mac</p>
-        <h1 id="hero-heading">
-          Shared control.
-          <br />
-          <span>Personal approval.</span>
-        </h1>
-        <p className="lead">
-          A dedicated iPad for your team&rsquo;s multisig approvals. Review the request, sign by
-          hand, authorize with your security key. Offline the whole time.
-        </p>
-        <div className="actions">
-          <a className="button" href="#workflow">
-            See how it works <ArrowRight size={18} />
-          </a>
-          <a className="link" href="#questions">
-            Read the questions
-          </a>
-        </div>
-      </motion.div>
-      <motion.div className="hero-device" style={{ y: deviceY }}>
-        <Device portrait={narrow} />
-        <p className="hero-note">Illustration with sample data. No signing keys are used.</p>
-      </motion.div>
-    </section>
   );
 }
 
@@ -188,36 +114,6 @@ export function Header({
   );
 }
 
-export function Workflow() {
-  return (
-    <section className="section shell" id="workflow" aria-labelledby="workflow-heading">
-      <Reveal className="heading">
-        <h2 id="workflow-heading">
-          Prepared together.
-          <br />
-          Approved individually.
-        </h2>
-        <p>Two apps share one process, and each member keeps their own approval.</p>
-      </Reveal>
-      <ol className="steps">
-        {steps.map(({ icon: Glyph, title, body, device }, index) => (
-          <li key={title}>
-            <Reveal className="step" delay={index * 0.09}>
-              <span className="step-icon">
-                <Glyph size={24} strokeWidth={1.7} />
-              </span>
-              <span className="step-number">0{index + 1}</span>
-              <h3>{title}</h3>
-              <p>{body}</p>
-              <span className="step-device">{device}</span>
-            </Reveal>
-          </li>
-        ))}
-      </ol>
-    </section>
-  );
-}
-
 export function Questions() {
   return (
     <section className="section shell narrow" id="questions" aria-labelledby="questions-heading">
@@ -270,35 +166,5 @@ export function Footer() {
       <p>Shared control. Personal approval.</p>
       <span>Made for iPad and Mac.</span>
     </footer>
-  );
-}
-
-/** The public product page, with no account collection or third-party analytics. */
-export function Site({ stars }: { stars?: number | null }) {
-  return (
-    <MotionConfig reducedMotion="user">
-      <Header stars={stars} />
-      <main id="main">
-        <Hero />
-        <section className="section shell" id="features" aria-labelledby="features-heading">
-          <Reveal className="heading">
-            <h2 id="features-heading">
-              Built for one decision
-              <br />
-              at a time.
-            </h2>
-            <p>
-              A browser is a busy place. Vow gives the request, your consent and your keys a screen
-              of their own.
-            </p>
-          </Reveal>
-          <Bento />
-        </section>
-        <Workflow />
-        <Questions />
-        <Closing />
-      </main>
-      <Footer />
-    </MotionConfig>
   );
 }

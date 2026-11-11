@@ -1,6 +1,6 @@
 import { ImageResponse } from 'next/og';
 
-export const alt = 'Vow — Shared control. Personal approval. Built for iPad and Mac.';
+export const alt = 'Vow — 3-factor authentication for multisig approvals, offline on iPad.';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
@@ -30,11 +30,11 @@ export default function OpenGraphImage() {
           fontWeight: 600,
         }}
       >
-        <span>Shared control.</span>
-        <span style={{ color: '#a1a1a6' }}>Personal approval.</span>
+        <span>3-Factor</span>
+        <span style={{ color: '#a1a1a6' }}>Authentication.</span>
       </div>
       <div style={{ display: 'flex', marginTop: 'auto', fontSize: 22, color: '#6e6e73' }}>
-        Built for iPad. Designed to stay offline.
+        Signature, security key and Touch ID. Offline, on iPad.
       </div>
     </div>,
     size,

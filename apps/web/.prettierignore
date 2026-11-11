@@ -7,5 +7,4 @@ next-env.d.ts
 playwright-report
 test-results
 src/stageshow/kit
-.next-*
 src/components/squads.tsx

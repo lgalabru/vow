@@ -14,11 +14,21 @@ pnpm --dir apps/web exec playwright install chromium
 just web-test
 ```
 
-The iPad in the hero is drawn in CSS at the iPad mini's real proportions; its
-screen and the feature tiles are scripted Stageshow scenes (`src/components/device.tsx`,
-`src/components/bento.tsx`) that use fictional sample data and no signing keys.
-They are pictures of the app, not controls. The kit is vendored in
-`src/stageshow/kit` (see `src/stageshow/README.md`) and excluded from lint.
+The page opens on the iPad app's three factors, driven by the scroll:
+handwritten signature, security key, Touch ID. A grid of feature tiles follows
+(enforced offline mode, request review, quorums, Squads), then a section on the
+Mac companion's ceremony.
+The iPad is drawn in CSS at the iPad mini's real proportions; the screens are
+Stageshow stages (`src/components/factors.tsx`, `src/components/bento.tsx`,
+`src/components/mac.tsx`) that
+use fictional sample data and no signing keys. They are pictures of the apps,
+not controls. The kit is vendored in `src/stageshow/kit` (see
+`src/stageshow/README.md`) and excluded from lint.
+
+The navigation shows the repository's GitHub star count. `src/app/page.tsx`
+reads it on the server at most once an hour, so visitors' browsers make no
+third-party request; the count is left out when GitHub cannot be reached.
+
 Keep availability, supported features and security claims consistent with the native
 prototype. The FAQ describes production limitations. There is no download or signup
 endpoint until a public release exists.

@@ -2,22 +2,34 @@ import { expect, test } from '@playwright/test';
 
 test('landing page presents the product without signing anything', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText(
-    'Shared control.Personal approval.',
-  );
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('3-FactorAuthentication.');
+  // The illustrations are pictures of the apps, not control surfaces.
+  await expect(page.getByRole('button')).toHaveCount(0);
+  await page.locator('#ipad').scrollIntoViewIfNeeded();
+  await expect(page.getByRole('heading', { name: 'Sign it yourself.' })).toBeVisible();
+  await page.locator('#features').scrollIntoViewIfNeeded();
+  await expect(page.getByText('Offline means offline.')).toBeVisible();
+  await expect(page.getByRole('img', { name: 'Squads' })).toBeVisible();
+  await page.locator('#mac').scrollIntoViewIfNeeded();
+  await expect(
+    page.getByRole('heading', { name: 'The ceremony happens on the Mac.' }),
+  ).toBeVisible();
   await expect(
     page.getByText('Illustration with sample data. No signing keys are used.'),
-  ).toBeVisible();
-  // The illustration is a picture of the app, not a control surface.
-  await expect(page.getByRole('button')).toHaveCount(0);
-  await page
-    .getByRole('heading', { name: 'Built for one decision at a time.' })
-    .scrollIntoViewIfNeeded();
-  await expect(page.getByText('Offline means offline.')).toBeVisible();
-  await expect(page.getByText('Approvals collected')).toBeVisible();
+  ).toBeAttached();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
+});
+
+test('the story follows the scroll through all three factors', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(() => {
+    const story = document.querySelector<HTMLElement>('#ipad')!;
+    const top = story.getBoundingClientRect().top + window.scrollY;
+    window.scrollTo({ top: top + (story.offsetHeight - window.innerHeight) * 0.95 });
+  });
+  await expect(page.getByRole('heading', { name: 'Three factors. One approval.' })).toBeVisible();
 });
 
 test('availability and limitations are discoverable', async ({ page }) => {
