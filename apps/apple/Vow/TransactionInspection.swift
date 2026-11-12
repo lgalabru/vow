@@ -38,6 +38,7 @@ struct TransactionInspection: Decodable, Identifiable {
     let warnings: [String]
   }
   let id: String
+  let reviewContextDigest: String
   let chain: ChainContext
   let networkExplicit: Bool
   let blockhash: String
@@ -48,6 +49,7 @@ struct TransactionInspection: Decodable, Identifiable {
   let signed: Bool
   let transactionHex: String
   let package: String
+  let simulation: ImportedSimulation?
 }
 enum StatusCountdown {
   case blockhash(BlockhashObservation)
@@ -159,128 +161,5 @@ struct BlockhashCountdown: View {
       )
       .font(.caption).foregroundStyle(.secondary)
     }
-  }
-}
-struct TransactionInspectionView: View {
-  @Bindable var model: VowModel
-  let inspection: TransactionInspection
-  @Environment(\.dismiss) private var dismiss
-  @State private var exportURL: URL?
-  @State private var dumpURL: URL?
-  @State private var error: String?
-  var body: some View {
-    NavigationStack {
-      ScrollView {
-        VStack(alignment: .leading, spacing: 24) {
-          #if os(iOS)
-            SigningProfilePicker(model: model)
-          #endif
-          Text(inspection.instructions.first?.title ?? "Inspect transaction").font(
-            .largeTitle.bold())
-          Text("\(inspection.chain.name) · \(inspection.instructions.count) instruction(s)")
-            .foregroundStyle(.secondary)
-          Text(
-            inspection.signed
-              ? "Contains signatures · not verified by this inspector" : "Unsigned transaction"
-          ).font(.caption).foregroundStyle(.secondary)
-          if !inspection.networkExplicit {
-            QuietNotice(
-              title: "Network chosen from this project",
-              message:
-                "Solana transaction bytes do not encode a network. This is a local review context, not evidence of the transaction’s intended chain.",
-              symbol: "network")
-          }
-          if let slot = inspection.channelOpenDeadlineSlot {
-            QuietNotice(
-              title: "Channel open deadline · slot \(slot.formatted())",
-              message:
-                "The program also limits open_slot to 1,500 slots. A fresh blockhash cannot extend this action window. Changing the open slot changes the channel address and requires another approval.",
-              symbol: "hourglass")
-          }
-          ForEach(inspection.instructions) { instruction in
-            VStack(alignment: .leading, spacing: 14) {
-              Text("\(instruction.id + 1). \(instruction.title)").font(.title2.bold())
-              Text(instruction.program).font(.system(.caption, design: .monospaced)).textSelection(
-                .enabled)
-              Surface {
-                VStack(spacing: 0) {
-                  ForEach(Array(instruction.fields.enumerated()), id: \.offset) { _, field in
-                    DetailLine(title: field.label, value: field.value)
-                  }
-                }
-              }
-              ForEach(instruction.warnings, id: \.self) {
-                Text($0).font(.callout).foregroundStyle(.secondary)
-              }
-              DisclosureGroup("All accounts and instruction bytes") {
-                VStack(alignment: .leading, spacing: 12) {
-                  ForEach(instruction.accounts, id: \.position) { account in
-                    Text(
-                      "\(account.position): \(account.address)\n\(account.signer ? "Signer" : "Non-signer") · \(account.writable ? "Writable" : "Read-only")"
-                    )
-                  }
-                  Text(instruction.dataHex).textSelection(.enabled)
-                }.font(.system(.caption, design: .monospaced)).padding(.top, 8)
-              }
-            }
-          }
-          QuietNotice(
-            title: "Attestation enforcement is unverified",
-            message:
-              "No installed Vow guard verifier can establish attestation enforcement for these bytes. An export cannot add enforcement. This transaction remains inspection-only until an installed decoder, account-state validation, paired policy and an unavoidable execution guard are verified.",
-            symbol: "exclamationmark.shield")
-          if inspection.unresolvedLookups {
-            ErrorNotice(
-              message: "Address lookup tables are unresolved. Account interpretation is incomplete."
-            )
-          }
-          if let error { ErrorNotice(message: error) }
-          HStack {
-            if let dumpURL {
-              ShareLink(
-                item: TransactionDump(url: dumpURL),
-                preview: SharePreview("Transaction dump", image: Image(systemName: "doc"))
-              ) {
-                Label("Share Transaction Dump", systemImage: "doc.badge.arrow.up")
-              }.draggable(TransactionDump(url: dumpURL))
-            }
-            if let exportURL {
-              ShareLink(
-                item: VowTransfer(url: exportURL),
-                preview: SharePreview("Transaction review", image: Image(systemName: "doc"))
-              ) {
-                Label("Share Review Bundle", systemImage: "square.and.arrow.up")
-              }
-              Text(exportURL.lastPathComponent).font(.caption).draggable(
-                VowTransfer(url: exportURL))
-            }
-          }
-          Text(
-            "Instruction decoding does not establish account state, program deployment or execution results. This view does not authorize or submit transactions."
-          ).font(.caption).foregroundStyle(.secondary)
-          DigestView(digest: inspection.id)
-        }.frame(maxWidth: 700).padding(28).frame(maxWidth: .infinity)
-      }
-      .navigationTitle("Transaction inspection")
-      .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
-    }
-    .networkStatusChrome(
-      countdown: inspection.blockhashContext.map(StatusCountdown.blockhash) ?? .unavailable
-    )
-    .task {
-      do {
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
-          "Vow-inspection-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let url = directory.appendingPathComponent("Transaction-\(inspection.id.prefix(12)).vow")
-        try Data(inspection.package.utf8).write(to: url, options: .atomic)
-        exportURL = url
-        let raw = directory.appendingPathComponent("Transaction-\(inspection.id.prefix(12)).bin")
-        try Data(hex: inspection.transactionHex).write(to: raw, options: .atomic)
-        dumpURL = raw
-      } catch { self.error = error.localizedDescription }
-    }
-    .onChange(of: model.state?.projectId) { _, _ in dismiss() }
-    .onChange(of: model.state?.organizationId) { _, _ in dismiss() }
   }
 }

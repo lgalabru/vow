@@ -28,8 +28,8 @@ SwiftUI supplies the native apps and hardware adapters.
 
 | Area | What it does | Status |
 | --- | --- | --- |
-| 🖥️ **Prepare** | A Mac browser captures unsigned Solana requests into a native review and export flow. | Limited SOL-transfer preview; other supported layouts can be inspected |
-| 📦 **Transfer** | `.vow` files carry transaction bytes, review context and optional replay evidence. Plain transaction dumps are accepted too. | Implemented |
+| 🖥️ **Prepare** | The Mac menu bar simulates clipboard transactions in Surfnet; the browser captures wallet requests. | Generic legacy/v0 clipboard simulation; browser preview remains limited |
+| 📦 **Transfer** | `.vow` files carry bytes, review context and fixtures. Paired nearby devices, USB storage and AirDrop can transport them. | Implemented; physical nearby acceptance ongoing |
 | 🔎 **Review** | Rust decodes instructions, binds network context and checks imported evidence. Unknown instructions and unresolved lookup tables block signing. | Limited installed decoders |
 | 🧪 **Reproduce** | Embedded Surfpool exports replay fixtures; LiteSVM independently reproduces supported results. | Synthetic state, not authenticated chain state |
 | ✍️ **Approve** | Handwritten consent, YubiKey verification and iPad authentication protect a Secure Enclave P-256 approval. Ledger profiles use the device's Solana account. | Prototype signatures and verification; physical-device acceptance ongoing |
@@ -86,6 +86,31 @@ xcrun simctl launch --terminate-running-process booted org.vow.prototype \
 
 These flags simulate the hardware and network gate for a UI rehearsal.
 
+## 📋 From clipboard to iPad
+
+With Vow running on Mac, open its V icon in the menu bar. Select Devnet or Mainnet,
+copy a serialized transaction as base64, hex or JSON, and choose **Prepare & Send
+Clipboard**. Surfnet simulates the original bytes against RPC-derived accounts.
+Multiple instructions, arbitrary programs, existing signatures and v0 lookup tables
+are accepted independently of Vow's signing decoders. Failed runtime results are
+included too. No transaction is submitted to the public network.
+
+On iPad, open **Settings → Receive from Mac**, or use that button on the network-lock
+screen. Enable Wi-Fi and Bluetooth and grant Local Network access. Compare the
+pairing code on both devices once; later transfers discover the paired iPad
+automatically while its receiver is open. Return to Vow and disconnect from the
+network before reviewing. Pairing authorizes file delivery, not signing.
+
+For a transfer with radios off, use **Save…** or drag the file onto a USB drive,
+then open it through Files on iPad. After import, remove the drive and connect your
+YubiKey. AirDrop and Finder export remain available too.
+
+Generic clipboard bundles contain a Mac simulation and state fixtures. Both apps
+can reproduce them in a fresh offline Surfpool SDK fork and inspect instruction
+profiles, parsed account-state diffs, raw bytes and logs. Fixtures remain unverified
+chain context; simulation never grants approval authority. Preparation has an 8 MB
+file limit.
+
 ## 🔑 Signing profiles
 
 **iPad + YubiKey.** The iPad key is P-256 and stays in Secure Enclave. New profiles
@@ -112,15 +137,32 @@ Vow does not authenticate the pen or match the signature to a person's identity.
 
 ## 📦 Review files
 
-A `.vow` file is a JSON review container. Depending on the export path, it includes
-transaction bytes, network and project context, instruction descriptions,
-blockhash observations and replay fixtures. It carries no signing private keys.
+A `.vow` file is a flattened native Apple `FileWrapper` document, shown as one
+file with a document icon and a measurable size in Finder and Files. It contains the original request, transaction bytes and optional
+simulation and account snapshots, with a manifest that checks each member.
+It carries no signing private keys. Older directory packages and JSON `.vow` files remain readable.
 Its exact schemas and limits are in the [contracts](docs/CONTRACTS.md).
 
 The iPad also imports binary, hex, base64 and JSON transaction dumps. A bare Solana
 transaction does not identify its network or when its blockhash was observed;
 Vow labels those missing facts. A countdown is an estimate, not proof that a
 transaction is still valid. Supplied labels, IDLs and fixtures are untrusted input.
+
+## ⌨️ Command line
+
+The Mac app carries a `vow` command at `Vow.app/Contents/Helpers/vow`. It
+prepares review files; it holds no keys and cannot sign or submit.
+
+```sh
+vow new <bytes> --chain devnet            # writes ./Vow-<digest>.vow
+vow new tx.json -c mainnet --simulate     # adds a local-fork simulation (reads the public RPC)
+vow mcp                                   # the same function as an MCP tool, over stdio
+```
+
+`<bytes>` is hex, base64 or a JSON dump, a file holding one (binary too), or
+`-` for standard input. The network is always stated, never inferred. The
+output is a JSON `.vow` file, which the apps read like their own documents.
+Existing files are not replaced without `--force`.
 
 ## 🗂️ Repository layout
 
@@ -132,8 +174,10 @@ vow/
 ├── crates/
 │   ├── core/           Formats, decoding, identities, policy and signature verification
 │   ├── ffi/            C ABI shared by the Apple apps
+│   ├── cli/            `vow` command line and MCP server, bundled in the Mac app
 │   ├── replay/         Offline replay verification
-│   ├── simulation/     Mac Surfpool simulation and fixture export
+│   ├── runtime/        Shared offline Surfpool execution and state diffs
+│   ├── simulation/     Mac capture, fixture export and shared snapshot profiling
 │   └── ledger/         Desktop Ledger adapter
 ├── spikes/             P-256 and bridge compatibility experiments
 ├── scripts/            Build, hardware-policy and asset tools

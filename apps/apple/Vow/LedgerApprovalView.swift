@@ -7,6 +7,7 @@ struct LedgerApprovalView: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.scenePhase) private var scenePhase
   @State private var step = 0
+  @State private var transactionReview: TransactionInspection?
   @State private var selectedProfile = ""
   @State private var busy = false
   @State private var status = ""
@@ -25,100 +26,123 @@ struct LedgerApprovalView: View {
     } ?? []
   }
   var body: some View {
-    NavigationStack {
-      VStack(spacing: 0) {
-        Form {
-          if step == 2 {
-            Section {
-              Label("Approval evidence ready", systemImage: "checkmark.seal.fill").font(
-                .title2.bold()
-              ).foregroundStyle(.green)
-              Text(
-                "The Ledger signature was verified against this request and profile. This is off-chain rehearsal evidence; it cannot execute a Solana transaction."
-              )
-            }
-          } else if let proposal = model.state?.proposal {
-            Section("Request") {
-              LabeledContent("Title", value: proposal.title)
-              LabeledContent("Amount", value: "\(proposal.displayAmount) \(proposal.asset)")
-              Text(proposal.recipient).font(.system(.caption, design: .monospaced)).textSelection(
-                .enabled)
-              Text(
-                "Off-chain rehearsal approval. No on-chain transaction will be signed or submitted."
-              ).font(.footnote).foregroundStyle(.secondary)
-            }
-            Section("Signing profile") {
-              if initialProfileID == nil {
-                Picker("Profile", selection: $selectedProfile) {
-                  ForEach(profiles) { profile in Text(profile.name).tag(profile.id) }
-                }.disabled(busy)
-              }
-              if let profile = profiles.first(where: { $0.id == selectedProfile }) {
-                Text(profile.address).font(.system(.caption, design: .monospaced)).textSelection(
-                  .enabled)
-                Text(profile.derivationPath ?? "").font(.caption).foregroundStyle(.secondary)
-              }
-            }
-            if step == 1 {
-              Section("Confirm on Ledger") {
-                Text(
-                  "Unlock the Ledger and open Solana. Verify the account address and review the approval on its screen. Vow never asks for the Ledger PIN."
-                )
-                #if os(iOS)
-                  LedgerDiscoveryView(
-                    mobile: mobile, busy: busy, selected: selectedDevice,
-                    onSearch: searchLedger, onSelect: connectLedger
+    ZStack {
+      if step == 0, let transactionReview,
+        let registered = profiles.first(where: { $0.id == selectedProfile }),
+        let choice = model.signingProfileChoices.first(where: {
+          $0.kind == "ledger" && $0.address == registered.address
+        })
+      {
+        TransactionInspectionView(
+          model: model, inspection: transactionReview, fixedProfile: choice,
+          continueApproval: { step = 1 })
+      } else {
+        NavigationStack {
+          VStack(spacing: 0) {
+            Form {
+              if step == 2 {
+                Section {
+                  Label("Approval evidence ready", systemImage: "checkmark.seal.fill").font(
+                    .title2.bold()
+                  ).foregroundStyle(.green)
+                  Text(
+                    "The Ledger signature was verified against this request and profile. This is off-chain rehearsal evidence; it cannot execute a Solana transaction."
                   )
-                  .task { if mobile == nil { searchLedger() } }
-                #endif
+                }
+              } else if let proposal = model.state?.proposal {
+                Section("Request") {
+                  LabeledContent("Title", value: proposal.title)
+                  LabeledContent("Amount", value: "\(proposal.displayAmount) \(proposal.asset)")
+                  Text(proposal.recipient).font(.system(.caption, design: .monospaced))
+                    .textSelection(
+                      .enabled)
+                  Text(
+                    "Off-chain rehearsal approval. No on-chain transaction will be signed or submitted."
+                  ).font(.footnote).foregroundStyle(.secondary)
+                }
+                Section("Signing profile") {
+                  if initialProfileID == nil {
+                    Picker("Profile", selection: $selectedProfile) {
+                      ForEach(profiles) { profile in Text(profile.name).tag(profile.id) }
+                    }.disabled(busy)
+                  }
+                  if let profile = profiles.first(where: { $0.id == selectedProfile }) {
+                    Text(profile.address).font(.system(.caption, design: .monospaced))
+                      .textSelection(
+                        .enabled)
+                    Text(profile.derivationPath ?? "").font(.caption).foregroundStyle(.secondary)
+                  }
+                }
+                if step == 1 {
+                  Section("Confirm on Ledger") {
+                    Text(
+                      "Unlock the Ledger and open Solana. Verify the account address and review the approval on its screen. Vow never asks for the Ledger PIN."
+                    )
+                    #if os(iOS)
+                      LedgerDiscoveryView(
+                        mobile: mobile, busy: busy, selected: selectedDevice,
+                        onSearch: searchLedger, onSelect: connectLedger
+                      )
+                      .task { if mobile == nil { searchLedger() } }
+                    #endif
+                  }
+                }
+              }
+              if busy { Section { ProgressView(status) } }
+              if let error { Section { Text(error).foregroundStyle(.red) } }
+            }.formStyle(.grouped)
+            HStack(spacing: 12) {
+              NetworkStatusBar(isInline: true).fixedSize()
+              if step < 2, let countdown = model.state?.proposal?.statusCountdown {
+                StatusCountdownView(countdown: countdown).fixedSize()
+              }
+              Spacer(minLength: 8)
+              if step == 0 {
+                Button("Continue") { step = 1 }.buttonStyle(.borderedProminent).disabled(
+                  profiles.isEmpty)
+              } else if step == 1 {
+                Button("Back", systemImage: "chevron.left") { step = 0 }.labelStyle(.iconOnly)
+                  .buttonStyle(.bordered).disabled(busy)
+                Button("Authorize", systemImage: "externaldrive") { authorize() }.buttonStyle(
+                  .borderedProminent
+                ).disabled(busy || !canAuthorize)
+              } else {
+                Button("Done") { dismiss() }.buttonStyle(.bordered)
+                if let exportURL {
+                  ShareLink(item: exportURL) {
+                    Label("Share Approval", systemImage: "square.and.arrow.up")
+                  }.buttonStyle(.borderedProminent)
+                }
+              }
+            }.controlSize(.large).padding(.horizontal, 16).padding(.vertical, 8)
+          }
+          .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+              Button("Cancel") {
+                cancel()
+                dismiss()
               }
             }
-          }
-          if busy { Section { ProgressView(status) } }
-          if let error { Section { Text(error).foregroundStyle(.red) } }
-        }.formStyle(.grouped)
-        HStack(spacing: 12) {
-          NetworkStatusBar(isInline: true).fixedSize()
-          if step < 2, let countdown = model.state?.proposal?.statusCountdown {
-            StatusCountdownView(countdown: countdown).fixedSize()
-          }
-          Spacer(minLength: 8)
-          if step == 0 {
-            Button("Continue") { step = 1 }.buttonStyle(.borderedProminent).disabled(
-              profiles.isEmpty)
-          } else if step == 1 {
-            Button("Back", systemImage: "chevron.left") { step = 0 }.labelStyle(.iconOnly)
-              .buttonStyle(.bordered).disabled(busy)
-            Button("Authorize", systemImage: "externaldrive") { authorize() }.buttonStyle(
-              .borderedProminent
-            ).disabled(busy || !canAuthorize)
-          } else {
-            Button("Done") { dismiss() }.buttonStyle(.bordered)
-            if let exportURL {
-              ShareLink(item: exportURL) {
-                Label("Share Approval", systemImage: "square.and.arrow.up")
-              }.buttonStyle(.borderedProminent)
+            ToolbarItem(placement: .principal) {
+              FlowBreadcrumb(
+                steps: ["Review", "Authorize", "Export"], current: step, compact: true)
             }
           }
-        }.controlSize(.large).padding(.horizontal, 16).padding(.vertical, 8)
-      }
-      .toolbar {
-        ToolbarItem(placement: .cancellationAction) {
-          Button("Cancel") {
-            cancel()
-            dismiss()
-          }
-        }
-        ToolbarItem(placement: .principal) {
-          FlowBreadcrumb(steps: ["Review", "Authorize", "Export"], current: step, compact: true)
+          #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+          #endif
         }
       }
-      #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
-      #endif
+    }
+    .task {
+      if model.state?.proposal?.transactionIntent != nil {
+        do { transactionReview = try model.call("inspect_current_proposal") } catch {
+          self.error = error.localizedDescription
+        }
+      }
     }
     #if os(macOS)
-      .frame(minWidth: 740, minHeight: 620)
+      .frame(minWidth: 960, minHeight: 700)
     #endif
     .onAppear { selectedProfile = initialProfileID ?? profiles.first?.id ?? "" }
     .onDisappear { cancel() }

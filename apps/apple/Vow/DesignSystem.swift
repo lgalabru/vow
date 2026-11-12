@@ -224,21 +224,19 @@ struct EmptyStateCard<Actions: View>: View {
 struct ProjectContextCard: View {
   let state: Snapshot
   var body: some View {
-    AssistantCard {
-      HStack(alignment: .firstTextBaseline, spacing: 16) {
-        Label(state.projectName, systemImage: "folder").font(.headline)
-        Spacer(minLength: 12)
-        if let chain = state.chain {
-          NetworkBadge(chain: chain.id)
-        } else {
-          Text("Network unavailable").font(.caption).foregroundStyle(.red)
-        }
-      }
-      if let quorum = state.quorum {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-          Text(quorum.name).foregroundStyle(.secondary)
+    if let chain = state.chain, !state.projectId.isEmpty {
+      AssistantCard {
+        HStack(alignment: .firstTextBaseline, spacing: 16) {
+          Label(state.projectName, systemImage: "folder").font(.headline)
           Spacer(minLength: 12)
-          Text(quorum.policyLabel).font(.subheadline).foregroundStyle(.secondary)
+          NetworkBadge(chain: chain.id)
+        }
+        if let quorum = state.quorum {
+          HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(quorum.name).foregroundStyle(.secondary)
+            Spacer(minLength: 12)
+            Text(quorum.policyLabel).font(.subheadline).foregroundStyle(.secondary)
+          }
         }
       }
     }

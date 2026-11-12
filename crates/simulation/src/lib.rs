@@ -1,16 +1,27 @@
-//! Connected-Mac preparation adapter. The SDK runs a fresh offline fork, not mainnet.
-use serde_json::{Value, json};
+//! Connected preparation and snapshot-only simulation through the Surfpool SDK.
+use serde_json::Value;
+#[cfg(target_os = "macos")]
+use serde_json::json;
+pub mod clipboard;
+mod offline;
 
 pub fn profile(request: &Value) -> Result<Value, String> {
+    if request["mode"] == "offline" {
+        return offline::profile(request);
+    }
     #[cfg(target_os = "macos")]
     {
-        mac::profile(request)
+        if request["mode"] == "clipboard" {
+            clipboard::profile(request)
+        } else {
+            mac::profile(request)
+        }
     }
     #[cfg(not(target_os = "macos"))]
     {
         let _ = request;
         Err(
-            "Surfpool profiling runs on the Mac. Replay the included snapshot on this device."
+            "Connected preparation is available on Mac. Use bundled account fixtures for offline simulation on this device."
                 .into(),
         )
     }
@@ -66,7 +77,7 @@ mod mac {
             }
             let slot=rpc.get_slot().map_err(|e|format!("Cannot fetch the local slot: {e}"))?;
             surfnet.stop().map_err(|e|format!("Surfpool did not shut down cleanly: {e}"))?;
-            Ok(json!({"format":"vow.prototype.reproduction.v1","engine":"surfpool-sdk 1.7.0","runtime_fingerprint":"litesvm-0.18.1-agave-4.3.2",
+            Ok(json!({"format":"vow.prototype.reproduction.v1","engine":"surfpool-sdk 1.7.0","runtime_fingerprint":"surfpool-sdk-1.7.0-agave-4.3.2",
                 "target_chain":intent.chain,"source":"synthetic_fixture","context_slot":slot,
                 "signature_checks":false,"blockhash_checks":false,"snapshot":accounts,
                 "absent_accounts":addresses.iter().filter(|a|!accounts.contains_key(*a)).collect::<Vec<_>>(),"expected":replay,"profile":profile,"wire_digest":decoded.wire_digest}))
@@ -117,5 +128,14 @@ mod tests {
             .dispatch(&json!({"action":"replay_transaction"}))
             .unwrap();
         assert!(replay["compute_units"].as_u64().unwrap() > 0);
+        let review = ipad
+            .dispatch(&json!({"action":"inspect_current_proposal"}))
+            .unwrap();
+        assert_eq!(review["simulation"]["state_source"], "synthetic_fixture");
+        let local =
+            profile(&json!({"mode":"offline","chain":"solana:devnet","package":review["package"]}))
+                .unwrap();
+        assert!(local["result"]["err"].is_null());
+        assert_eq!(local["execution_ready"], false);
     }
 }

@@ -1,0 +1,51 @@
+{
+  "chain": "solana:devnet",
+  "format": "vow.prototype.inspection.v1",
+  "genesis_hash": "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG",
+  "simulation": {
+    "blockhash_checks": false,
+    "chain": "solana:devnet",
+    "format": "vow.simulation.v1",
+    "genesis_hash": "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG",
+    "result": {
+      "err": null
+    },
+    "rpc_slot_end": 0,
+    "rpc_slot_start": 0,
+    "signature_checks": false,
+    "snapshot": {
+      "CktRuQ2mttgRGkXJtyksdKHjUdc2C4TgDzyB98oEzy8": {
+        "data": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCYCWmAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "executable": false,
+        "lamports": 2039280,
+        "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        "rentEpoch": 0
+      },
+      "GgBaCs3NCBuZN12kCJgAW63ydqohFkHEdfdEXBPzLHq": {
+        "data": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "executable": false,
+        "lamports": 2039280,
+        "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        "rentEpoch": 0
+      },
+      "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA": null,
+      "US517G5965aydkZ46HS38QLi7UQiSojurfbQfKCELFx": {
+        "data": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgJaYAAAAAAAGAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+        "executable": false,
+        "lamports": 1461600,
+        "owner": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        "rentEpoch": 0
+      },
+      "cGfHiC6Kgg3FpFZvgwGcswsCRtp4aBP2fzuXRQPizuN": {
+        "data": "",
+        "executable": false,
+        "lamports": 10000000000,
+        "owner": "11111111111111111111111111111111",
+        "rentEpoch": 0
+      }
+    },
+    "state_source": "synthetic_fixture",
+    "wire_digest": "92916af925048ca34de1d8987cc8a196fd39b13e48ad1c4c6431a617c4fdbd01"
+  },
+  "transaction_hex": "01000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100010409090909090909090909090909090909090909090909090909090909090909090303030303030303030303030303030303030303030303030303030303030303040404040404040404040404040404040404040404040404040404040404040406ddf6e1d765a193d9cbe146ceeb79ac1cb485ed5f5b37913a8cf5857eff00a90707070707070707070707070707070707070707070707070707070707070707010303010200090340420f0000000000"
+}

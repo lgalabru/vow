@@ -38,6 +38,78 @@ final class VowUITests: XCTestCase {
     add(attachment)
   }
   #if os(macOS)
+    func testOrganizationSwitcherAndCreationLayout() throws {
+      let app = XCUIApplication()
+      app.launchArguments = ["--ui-test-session", "-ApplePersistenceIgnoreState", "YES", "-NSQuitAlwaysKeepsWindows", "NO"]
+      launch(app)
+      if !app.windows.firstMatch.waitForExistence(timeout: 3) { app.typeKey("n", modifierFlags: .command) }
+      let picker = app.popUpButtons["organizationSwitcher"]
+      XCTAssertTrue(picker.waitForExistence(timeout: 10))
+      XCTAssertGreaterThanOrEqual(picker.frame.width, 220)
+      picker.click()
+      let create = app.menuItems["New Organization…"]
+      XCTAssertTrue(create.waitForExistence(timeout: 5))
+      XCTAssertGreaterThanOrEqual(create.frame.width, picker.frame.width - 16)
+      create.click()
+      let name = app.textFields["workspaceName"]
+      XCTAssertTrue(name.waitForExistence(timeout: 5))
+      let submit = app.buttons["Create organization"]
+      XCTAssertFalse(submit.isEnabled)
+      name.typeText("Research lab")
+      XCTAssertTrue(submit.isEnabled)
+      capture(app, "Mac — Organization creation")
+      app.typeKey(.escape, modifierFlags: [])
+      XCTAssertTrue(picker.waitForExistence(timeout: 5))
+    }
+    func testMacTransactionReviewShowsUnknownExpiryAndDoesNotAuthorize() throws {
+      let app = XCUIApplication()
+      app.launchArguments = ["--ui-test-import-channel"]
+      launch(app)
+      XCTAssertTrue(app.buttons["reviewContext"].waitForExistence(timeout: 15))
+      XCTAssertTrue(app.buttons["reviewContext"].label.contains("Open payment channel"))
+      XCTAssertTrue(app.staticTexts["Snapshot required"].exists)
+      XCTAssertTrue(app.descendants(matching: .any)["reviewDeadlineStatus"].label.contains("Expiry unknown"))
+      XCTAssertFalse(app.buttons["reviewDeadlineAction"].exists)
+      XCTAssertFalse(app.buttons["authorizeApproval"].exists)
+      capture(app, "Mac — Transaction review")
+    }
+    func testMacMenuBarIconHasCompactBounds() throws {
+      let app=XCUIApplication()
+      launch(app)
+      let named=app.statusItems["vowMenuBar"]
+      let item=named.exists ? named : app.statusItems.firstMatch
+      XCTAssertTrue(item.waitForExistence(timeout:10))
+      XCTAssertGreaterThan(item.frame.width,0)
+      XCTAssertLessThanOrEqual(item.frame.width,40)
+      let attachment=XCTAttachment(screenshot:item.screenshot())
+      attachment.name="Mac — Current menu-bar icon"
+      attachment.lifetime = .keepAlways
+      add(attachment)
+    }
+    func testMacClipboardPanelIsCompactAndVisible() throws {
+      let app=XCUIApplication()
+      launch(app)
+      let named=app.statusItems["vowMenuBar"]
+      let item=named.exists ? named : app.statusItems.firstMatch
+      XCTAssertTrue(item.waitForExistence(timeout:10))
+      // Use the native Edit command to avoid stale status-item coordinates.
+      app.typeKey("v", modifierFlags: [.command, .option])
+      let prepare=app.buttons["prepareClipboard"]
+      XCTAssertTrue(prepare.waitForExistence(timeout:5))
+      XCTAssertTrue(prepare.isHittable)
+      XCTAssertGreaterThanOrEqual(prepare.frame.height,28)
+      XCTAssertTrue(app.staticTexts["Vow"].exists)
+      XCTAssertFalse(app.staticTexts["Send a transaction"].exists)
+      let panel=app.popovers.firstMatch
+      if panel.exists {
+        XCTAssertLessThan(panel.frame.height,430)
+        let snapshot=XCTAttachment(screenshot:panel.screenshot())
+        snapshot.name="Mac — Visible menu-bar clipboard panel"
+        snapshot.lifetime = .keepAlways
+        add(snapshot)
+      }
+      app.typeKey(.escape,modifierFlags:[])
+    }
     func testMacProfilesSetupDoesNotContactLedgerBeforeConfirmation() throws {
       let app = XCUIApplication()
       launch(app)
@@ -49,6 +121,30 @@ final class VowUITests: XCTestCase {
       capture(app, "Mac — Ledger profile setup")
     }
   #endif
+  func testTransactionAccountStateDiffs() throws {
+    let app = XCUIApplication()
+    app.launchArguments = ["--ui-test-network=offline", "--ui-test-import-state-diff"]
+    launch(app)
+    XCTAssertTrue(app.buttons["reviewContext"].waitForExistence(timeout: 15))
+    #if os(macOS)
+      let tab = app.radioButtons["Account changes"]
+      if tab.exists { tab.click() } else { app.buttons["Account changes"].click() }
+    #else
+      app.buttons["Account changes"].tap()
+    #endif
+    XCTAssertTrue(app.staticTexts["tokenAmount.amount"].firstMatch.waitForExistence(timeout: 30))
+    XCTAssertTrue(app.staticTexts["− Before"].firstMatch.exists)
+    XCTAssertTrue(app.staticTexts["+ After"].firstMatch.exists)
+    capture(app, "Account states — Parsed token balance diffs")
+    #if os(macOS)
+      let hex = app.radioButtons["Hex"].firstMatch
+      if hex.exists { hex.click() } else { app.buttons["Hex"].firstMatch.click() }
+    #else
+      app.buttons["Hex"].firstMatch.tap()
+    #endif
+    XCTAssertTrue(app.staticTexts["000040"].firstMatch.waitForExistence(timeout: 5))
+    capture(app, "Account states — Changed bytes")
+  }
   func testPrototypeFlow() throws {
     let app = XCUIApplication()
     app.launchArguments = [
@@ -152,6 +248,26 @@ final class VowUITests: XCTestCase {
     private func setConnection(_ app: XCUIApplication, connected: Bool) {
       app.buttons["testConnection"].tap()
       app.buttons[connected ? "Connect" : "Disconnect"].tap()
+    }
+    func testNearbyReceiveQueuesFilesUntilTransportClosesAndDeviceIsOffline() throws {
+      let app=XCUIApplication()
+      app.launchArguments=["--ui-test-network=online","--ui-test-nearby"]
+      launch(app)
+      XCTAssertTrue(app.staticTexts["Network connection detected"].waitForExistence(timeout:10))
+      app.buttons["receiveFromMac"].tap()
+      let receive=app.buttons["receiveNearbyFixture"]
+      XCTAssertTrue(receive.waitForExistence(timeout:5))
+      XCTAssertTrue(app.staticTexts["Signing is locked while this receiver is open. Pairing authorizes file delivery only."].exists)
+      receive.tap()
+      XCTAssertTrue(app.staticTexts["Review file received"].firstMatch.waitForExistence(timeout:5))
+      XCTAssertFalse(app.buttons["authorizeApproval"].exists)
+      app.buttons["Return to Vow"].tap()
+      XCTAssertTrue(app.staticTexts["Network connection detected"].waitForExistence(timeout:5))
+      XCTAssertFalse(app.buttons["authorizeApproval"].exists)
+      setConnection(app,connected:false)
+      XCTAssertTrue(app.staticTexts["SOL transfer"].firstMatch.waitForExistence(timeout:10))
+      XCTAssertTrue(app.buttons["replayTransaction"].exists)
+      capture(app,"iPad — Nearby file queued until offline")
     }
     func testNetworkGateAndAutomaticUnlock() throws {
       let app = XCUIApplication()
@@ -877,16 +993,35 @@ final class VowUITests: XCTestCase {
       XCTAssertTrue(app.staticTexts["Replay matches"].waitForExistence(timeout: 15))
       capture(app, "iPad — Imported Surfpool replay")
     }
+    func testNativeDocumentPackageReplaysOffline() throws {
+      let app = XCUIApplication()
+      app.launchArguments = ["--ui-test-network=offline", "--ui-test-import-package"]
+      launch(app)
+      XCTAssertTrue(app.staticTexts["SOL transfer"].firstMatch.waitForExistence(timeout: 15))
+      XCTAssertTrue(app.staticTexts["0.25"].firstMatch.exists)
+      let replay = app.buttons["replayTransaction"]
+      for _ in 0..<5 where !replay.isHittable { app.swipeUp() }
+      XCTAssertTrue(replay.waitForExistence(timeout: 5))
+      replay.tap()
+      XCTAssertTrue(app.staticTexts["Replay matches"].waitForExistence(timeout: 15))
+      capture(app, "iPad — Native Vow document package")
+    }
     func testPlainChannelDumpInspection() throws {
       let app = XCUIApplication()
       app.launchArguments = ["--ui-test-network=offline", "--ui-test-import-channel"]
       launch(app)
-      XCTAssertTrue(
-        app.staticTexts["Open payment channel"].firstMatch.waitForExistence(timeout: 15))
-      XCTAssertEqual(app.buttons["requestCountdown"].label, "Expiry unavailable")
+      XCTAssertTrue(app.buttons["reviewContext"].waitForExistence(timeout: 15))
+      XCTAssertTrue(app.buttons["reviewContext"].label.contains("Open payment channel"))
+      XCTAssertTrue(app.descendants(matching: .any)["reviewDeadlineStatus"].label.contains("Expiry unknown"))
+      XCTAssertFalse(app.buttons["reviewDeadlineAction"].exists)
+      XCTAssertTrue(app.staticTexts["Snapshot required"].exists)
       XCTAssertFalse(app.buttons["authorizeApproval"].exists)
-      XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+      XCTAssertTrue(app.buttons["Close"].waitForExistence(timeout: 5))
       capture(app, "iPad — Plain channel transaction dump")
+      XCUIDevice.shared.orientation = .landscapeLeft
+      let rotated = NSPredicate { _, _ in app.frame.width > app.frame.height }
+      XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: rotated, object: nil)], timeout: 5), .completed)
+      capture(app, "iPad — Landscape transaction review")
     }
   #endif
 
@@ -897,7 +1032,7 @@ final class VowUITests: XCTestCase {
         "-ApplePersistenceIgnoreState", "YES", "-NSQuitAlwaysKeepsWindows", "NO",
       ]
       launch(app)
-      let apps = app.outlines.buttons["Apps"]
+      let apps = app.outlines.buttons["Browser"]
       XCTAssertTrue(apps.waitForExistence(timeout: 10))
       apps.click()
       let connect = app.webViews.buttons["Connect Vow"]
@@ -981,7 +1116,7 @@ final class VowUITests: XCTestCase {
       XCTAssertTrue(name.waitForExistence(timeout: 5))
       name.click()
       name.typeText("Research lab")
-      app.buttons["Create"].click()
+      app.buttons["Create organization"].click()
       XCTAssertTrue(app.staticTexts["Research lab"].firstMatch.waitForExistence(timeout: 5))
       capture(app, "Mac — New organization")
     }

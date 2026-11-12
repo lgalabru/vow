@@ -106,7 +106,12 @@ struct NetworkStatusBar: View {
   private var color: Color {
     switch network.status {
     case .offline: .green
-    case .online: .red
+    case .online:
+      #if os(iOS)
+        .red
+      #else
+        .secondary
+      #endif
     case .requiresConnection:
       #if os(iOS)
         .red
@@ -195,12 +200,12 @@ struct NetworkStatusBar: View {
     .frame(maxWidth: isInline ? nil : .infinity)
     .background {
       #if os(macOS)
-        Rectangle().fill(.bar)
+        if !isInline { Rectangle().fill(.bar) }
       #endif
     }
     .overlay(alignment: .top) {
       #if os(macOS)
-        Divider()
+        if !isInline { Divider() }
       #endif
     }
   }
@@ -235,11 +240,18 @@ struct NetworkStatusBar: View {
     @Environment(NetworkStatus.self) private var network
     @State private var keys = DeviceKey()
     @State private var securityKey = SecurityKeyMonitor()
+    @State private var receiving = false
+    @Environment(NearbyTransferService.self) private var nearby
     @State private var requiresProfileSetup: Bool?
     @Environment(\.scenePhase) private var scenePhase
     var body: some View {
       Group {
-        if network.isOffline {
+        if receiving || nearby.active {
+          ContentUnavailableView(
+            "Receiving a review file", systemImage: "arrow.down.doc",
+            description: Text(
+              "Signing resumes after the nearby connection closes and this iPad is offline."))
+        } else if network.isOffline {
           if let error = model.storageFailure {
             ContentUnavailableView(
               "Profiles could not be loaded", systemImage: "externaldrive.badge.exclamationmark",
@@ -251,27 +263,51 @@ struct NetworkStatusBar: View {
             )
             .id(network.interruptionEpoch)
           } else {
-            SignerRootView(model: model, keys: keys).id(network.interruptionEpoch)
+            SignerRootView(model: model, keys: keys, onReceiveFromMac: { receiving = true }).id(
+              network.interruptionEpoch)
           }
         } else {
-          NetworkBlockedView().networkStatusChrome()
+          NetworkBlockedView(onReceive: { receiving = true }).networkStatusChrome()
         }
       }
       .environment(securityKey)
+      .sheet(isPresented: $receiving) { NearbyReceiveView(nearby: nearby) }
+      .onChange(of: receiving) { _, active in
+        if active {
+          model.perform("cancel")
+          securityKey.stop()
+        } else if network.isOffline && !nearby.active {
+          model.importPendingFile()
+          securityKey.start()
+        }
+      }
+      .onChange(of: nearby.active) { _, active in
+        if active {
+          model.perform("cancel")
+          securityKey.stop()
+        } else if !receiving && network.isOffline {
+          model.importPendingFile()
+          securityKey.start()
+        }
+      }
       .onChange(of: scenePhase) { _, phase in
         if phase == .background { securityKey.stop() }
-        if phase == .active { securityKey.start() }
+        if phase == .active && !receiving && !nearby.active { securityKey.start() }
       }
       .onAppear {
+        nearby.onFileReceived = { file in model.importFile(file, deferUntilOffline: true) }
         if requiresProfileSetup == nil {
           requiresProfileSetup = !model.hasSigningProfiles && !keys.isUITestCompleted
         }
         securityKey.configure(
           expected: keys.registeredSecurityKey,
           preferNative: NativeSecurityKey.prefersNativeEnrollment(device: keys))
-        if network.isOffline { model.importPendingFile() }
+        if network.isOffline && !receiving && !nearby.active { model.importPendingFile() }
       }
       .onChange(of: model.workspaceResetGeneration) { _, _ in
+        nearby.stop()
+        nearby.clearReceivedFile()
+        receiving = false
         securityKey.stop()
         keys.clearCachedIdentity()
         securityKey.configure(expected: nil, preferNative: false)
@@ -279,17 +315,22 @@ struct NetworkStatusBar: View {
         requiresProfileSetup = true
       }
       .onChange(of: network.interruptionEpoch) { _, _ in model.perform("cancel") }
-      .onChange(of: network.isOffline) { _, offline in if offline { model.importPendingFile() } }
-      .onOpenURL { url in model.importFile(url, deferUntilOffline: !network.isOffline) }
+      .onChange(of: network.isOffline) { _, offline in
+        if offline && !receiving && !nearby.active { model.importPendingFile() }
+      }
+      .onOpenURL { url in
+        model.importFile(url, deferUntilOffline: !network.isOffline || receiving || nearby.active)
+      }
       .dropDestination(for: URL.self) { urls, _ in
         guard urls.count == 1, let url = urls.first, url.isFileURL else { return false }
-        model.importFile(url, deferUntilOffline: !network.isOffline)
+        model.importFile(url, deferUntilOffline: !network.isOffline || receiving || nearby.active)
         return true
       }
     }
   }
 
   private struct NetworkBlockedView: View {
+    var onReceive: () -> Void
     @Environment(NetworkStatus.self) private var network
     private var checking: Bool { network.status == .checking }
     var body: some View {
@@ -323,6 +364,8 @@ struct NetworkStatusBar: View {
             )
             .font(.caption).foregroundStyle(.tertiary).multilineTextAlignment(.center)
             .frame(maxWidth: 380)
+            Button("Receive from Mac", systemImage: "arrow.down.doc", action: onReceive)
+              .buttonStyle(.bordered).controlSize(.large).accessibilityIdentifier("receiveFromMac")
             Spacer(minLength: 40)
           }.padding(32).frame(maxWidth: .infinity)
             .frame(minHeight: geometry.size.height)

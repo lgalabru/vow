@@ -78,28 +78,21 @@ pub unsafe extern "C" fn vow_string_free_v1(ptr: *mut c_char) {
     }
 }
 
-/// Profile a bounded preview transaction in the Mac SDK. No session/key state is exposed.
+/// Profile transactions through the shared SDK. Offline snapshot mode runs on both Apple platforms.
+/// No signing-session or key state is exposed.
 /// # Safety
 /// `data` must point to `len` readable bytes; the owned result uses `vow_string_free_v1`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn vow_profile_transaction_v1(data: *const u8, len: usize) -> *mut c_char {
     let result = catch_unwind(AssertUnwindSafe(|| -> Result<Value, String> {
-        if data.is_null() || len == 0 || len > 16 * 1024 {
+        if data.is_null() || len == 0 || len > 9 * 1024 * 1024 {
             return Err("Invalid profiling input size.".into());
         }
         // SAFETY: caller owns readable input for this call, checked for null and bounded length.
         let request: Value =
             serde_json::from_slice(unsafe { std::slice::from_raw_parts(data, len) })
                 .map_err(|_| "Invalid profiling input.")?;
-        #[cfg(target_os = "macos")]
-        {
-            vow_simulation::profile(&request)
-        }
-        #[cfg(not(target_os = "macos"))]
-        {
-            let _ = request;
-            Err("Profiling is available on Mac only.".into())
-        }
+        vow_simulation::profile(&request)
     }));
     output(match result {
         Ok(Ok(data)) => json!({"ok":true,"data":data}),

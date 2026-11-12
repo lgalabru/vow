@@ -79,10 +79,13 @@ pub fn transaction(bytes: &[u8]) -> Result<VersionedTransaction, String> {
 // or a small JSON envelope. No missing network is inferred from transaction bytes.
 pub fn inspect(request: &Value, chain: Chain) -> Result<Value, String> {
     let raw = text(request, "data")?;
-    if raw.len() > 64 * 1024 {
-        return Err("Transaction dump exceeds the inspection limit.".into());
+    if raw.len() > 8 * 1024 * 1024 {
+        return Err("Transaction review file exceeds the inspection limit.".into());
     }
     let value = serde_json::from_str::<Value>(raw).unwrap_or(Value::Null);
+    if raw.len() > 64 * 1024 && value["format"] != "vow.prototype.inspection.v1" {
+        return Err("Transaction dump exceeds the inspection limit.".into());
+    }
     if let Some(id) = value.get("chain")
         && id.as_str() != Some(chain.wallet_id())
     {
@@ -94,16 +97,26 @@ pub fn inspect(request: &Value, chain: Chain) -> Result<Value, String> {
         return Err("The dump genesis hash does not match this project.".into());
     }
     let hex = value.get("transaction_hex").and_then(Value::as_str);
+    let tuple = value
+        .get("transaction")
+        .and_then(Value::as_array)
+        .or_else(|| {
+            value
+                .get("result")
+                .and_then(|r| r.get("transaction"))
+                .and_then(Value::as_array)
+        })
+        .or_else(|| value.as_array());
+    if let Some(tuple) = tuple
+        && (tuple.len() != 2 || tuple[1] != "base64" || tuple[0].as_str().is_none())
+    {
+        return Err("Paste one serialized transaction. Encoded RPC tuples must be [transaction, base64]; transaction batches are not silently truncated.".into());
+    }
     let b64 = value
         .get("transaction_base64")
         .and_then(Value::as_str)
-        .or_else(|| {
-            value
-                .get("transaction")
-                .and_then(|v| v.get(0))
-                .and_then(Value::as_str)
-        })
-        .or_else(|| value.get(0).and_then(Value::as_str));
+        .or_else(|| value.get("transaction").and_then(Value::as_str))
+        .or_else(|| tuple.and_then(|items| items[0].as_str()));
     let bytes = if let Some(hex) = hex {
         hex::decode(hex).map_err(|_| "Invalid transaction hex.")?
     } else if let Some(b64) = b64 {
@@ -245,9 +258,19 @@ pub fn inspect(request: &Value, chain: Chain) -> Result<Value, String> {
         }
         instructions.push(json!({"id":index,"title":title,"program":program,"fields":fields,"accounts":accounts,"data_hex":hex::encode(&ix.data),"warnings":warnings}));
     }
-    let envelope = json!({"format":"vow.prototype.inspection.v1","chain":chain.wallet_id(),"genesis_hash":chain.genesis_hash(),"transaction_base64":base64::prelude::BASE64_STANDARD.encode(&bytes),"blockhash_context":validity});
+    if let Some(simulation) = value.get("simulation").filter(|v| !v.is_null()) {
+        vow_replay::validate_simulation(
+            simulation,
+            &hex::encode(&bytes),
+            chain.wallet_id(),
+            chain.genesis_hash(),
+        )?;
+    }
+    let envelope = json!({"simulation":value.get("simulation"),"format":"vow.prototype.inspection.v1","chain":chain.wallet_id(),"genesis_hash":chain.genesis_hash(),"transaction_base64":base64::prelude::BASE64_STANDARD.encode(&bytes),"blockhash_context":validity});
+    let package =
+        serde_json::to_string_pretty(&envelope).map_err(|_| "Cannot encode inspection file.")?;
     Ok(
-        json!({"id":digest(&bytes),"chain":chain.snapshot(),"network_explicit":value.get("chain").is_some(),"blockhash":hash,"blockhash_context":validity,"channel_open_deadline_slot":channel_open_deadline_slot,"instructions":instructions,"unresolved_lookups":unresolved,"signature_count":tx.signatures.len(),"signed":tx.signatures.iter().any(|s|s.as_ref().iter().any(|b|*b!=0)),"transaction_hex":hex::encode(&bytes),"package":serde_json::to_string_pretty(&envelope).map_err(|_|"Cannot encode inspection file.")?,"execution_ready":false}),
+        json!({"review_context_digest":digest(package.as_bytes()),"simulation":value.get("simulation"),"id":digest(&bytes),"chain":chain.snapshot(),"network_explicit":value.get("chain").is_some(),"blockhash":hash,"blockhash_context":validity,"channel_open_deadline_slot":channel_open_deadline_slot,"instructions":instructions,"unresolved_lookups":unresolved,"signature_count":tx.signatures.len(),"signed":tx.signatures.iter().any(|s|s.as_ref().iter().any(|b|*b!=0)),"transaction_hex":hex::encode(&bytes),"package":package,"execution_ready":false}),
     )
 }
 fn key(s: &str) -> Result<Pubkey, String> {

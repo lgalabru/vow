@@ -3,7 +3,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 extension UTType {
-  static let vowTransaction = UTType(exportedAs: "org.vow.transaction", conformingTo: .json)
+  static let vowTransaction = UTType(exportedAs: "org.vow.transaction", conformingTo: .data)
 }
 struct VowTransfer: Transferable, Sendable {
   let url: URL
@@ -414,7 +414,7 @@ struct PreparedWebTransaction: Decodable {
           "Vow-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let url = directory.appendingPathComponent(file.filename)
-        try Data(file.package.utf8).write(to: url, options: [.atomic])
+        try VowDocument.write(Data(file.package.utf8), to: url)
         prepared = file
         fileURL = url
       } catch { self.error = error.localizedDescription }

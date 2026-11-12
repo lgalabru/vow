@@ -1,0 +1,19 @@
+[package]
+name = "vow-cli"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "vow"
+path = "src/main.rs"
+
+[dependencies]
+vow-core = { path = "../core" }
+vow-simulation = { path = "../simulation" }
+serde.workspace = true
+serde_json.workspace = true
+hex.workspace = true
+clap = { version = "4", features = ["derive"] }
+rmcp = { version = "3.5", features = ["server", "transport-io", "schemars"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std"] }

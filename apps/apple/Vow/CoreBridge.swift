@@ -120,6 +120,7 @@ struct VowError: LocalizedError {
         #if os(iOS)
           if try IdentityKeychain.hasResetIntent() {
             try IdentityKeychain.eraseAll()
+            try NearbyIdentityStore.erase()
             try identityStore.clearTemporaryExports()
             if let bundle = Bundle.main.bundleIdentifier {
               UserDefaults.standard.removePersistentDomain(forName: bundle)
@@ -154,16 +155,34 @@ struct VowError: LocalizedError {
           if let state { try persist(state) }
         }
       }
-      #if DEBUG && targetEnvironment(simulator)
-        if ProcessInfo.processInfo.arguments.contains("--ui-test-import-fixture"),
-          let url = Bundle.main.url(forResource: "CapturedTransfer", withExtension: "vow")
+      #if DEBUG && (os(macOS) || targetEnvironment(simulator))
+        if ProcessInfo.processInfo.arguments.contains("--ui-test-import-fixture")
+          || ProcessInfo.processInfo.arguments.contains("--ui-test-import-package"),
+          let source = Bundle.main.url(forResource: "CapturedTransfer", withExtension: "vow")
         {
+          var url = source
+          if ProcessInfo.processInfo.arguments.contains("--ui-test-import-package") {
+            let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            url = directory.appendingPathComponent("Review.vow")
+            try VowDocument.write(Data(contentsOf: source), to: url)
+          }
           importFile(url, deferUntilOffline: true)
+        }
+        if ProcessInfo.processInfo.arguments.contains("--ui-test-import-state-diff"),
+          let url = Bundle.main.url(forResource: "TokenTransferReview", withExtension: "vow") {
+          importFile(url, deferUntilOffline: true)
+          #if os(macOS)
+            importPendingFile()
+          #endif
         }
         if ProcessInfo.processInfo.arguments.contains("--ui-test-import-channel"),
           let url = Bundle.main.url(forResource: "ChannelOpen", withExtension: "bin")
         {
           importFile(url, deferUntilOffline: true)
+          #if os(macOS)
+            importPendingFile()
+          #endif
         }
       #endif
       #if DEBUG
@@ -219,6 +238,7 @@ struct VowError: LocalizedError {
         try identityStore.save(
           personalIdentities: "[]", organizationProfiles: "[]", workspaceCleared: true)
         try IdentityKeychain.eraseAll()
+        try NearbyIdentityStore.erase()
         device.clearCachedIdentity()
         try identityStore.clearTemporaryExports()
         if let bundle = Bundle.main.bundleIdentifier {
@@ -301,16 +321,7 @@ struct VowError: LocalizedError {
     let accessed = url.startAccessingSecurityScopedResource()
     defer { if accessed { url.stopAccessingSecurityScopedResource() } }
     do {
-      let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-      guard size <= 8 * 1024 * 1024 else {
-        throw VowError(message: "Choose a Vow file smaller than 8 MB.")
-      }
-      let handle = try FileHandle(forReadingFrom: url)
-      defer { try? handle.close() }
-      let bytes = try handle.read(upToCount: 8 * 1024 * 1024 + 1) ?? Data()
-      guard bytes.count <= 8 * 1024 * 1024 else {
-        throw VowError(message: "This file couldn't be read as a Vow package.")
-      }
+      let bytes = try VowDocument.read(url)
       pendingImportedContent =
         String(data: bytes, encoding: .utf8).flatMap {
           $0.unicodeScalars.contains(where: { $0.value < 9 || ($0.value > 13 && $0.value < 32) })

@@ -1,22 +1,11 @@
-//! Offline SVM replay. No RPC client, HTTP fallback, or dynamic program loader.
+//! Snapshot replay through the shared offline Surfpool SDK runtime. No remote RPC fallback.
 use base64::Engine;
-use litesvm::LiteSVM;
 use serde::{Deserialize, Serialize};
-use solana_account::Account;
 use solana_address::Address;
 use solana_transaction_replay::versioned::VersionedTransaction;
 use std::{collections::BTreeMap, str::FromStr};
 
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct AccountSnapshot {
-    pub lamports: u64,
-    pub owner: String,
-    pub executable: bool,
-    #[serde(alias = "rentEpoch")]
-    pub rent_epoch: u64,
-    pub data: String,
-}
+pub use vow_runtime::AccountSnapshot;
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct ReplayResult {
@@ -36,59 +25,37 @@ pub fn replay(
     let bytes = hex::decode(transaction_hex).map_err(|_| "Invalid transaction bytes.")?;
     let tx: VersionedTransaction =
         wincode::deserialize(&bytes).map_err(|_| "Unsupported replay transaction.")?;
-    let mut svm = LiteSVM::new()
-        .with_sigverify(false)
-        .with_blockhash_check(false);
-    let mut total = 0usize;
-    for (address, entry) in snapshot {
-        total = total
-            .checked_add(entry.data.len())
-            .ok_or("Snapshot is too large.")?;
-        if total > 8 * 1024 * 1024 {
-            return Err("Snapshot is too large.".into());
-        }
-        let address = Address::from_str(address).map_err(|_| "Invalid snapshot address.")?;
-        let owner = Address::from_str(&entry.owner).map_err(|_| "Invalid snapshot owner.")?;
-        let data = base64::prelude::BASE64_STANDARD
-            .decode(&entry.data)
-            .map_err(|_| "Invalid snapshot data.")?;
-        // Executable blobs need an explicit approved program-loading policy before
-        // the offline signer may accept them. The initial transfer replay uses builtins.
-        if entry.executable {
-            return Err(
-                "Downloaded executable programs are not enabled in this replay profile.".into(),
-            );
-        }
-        svm.set_account(
-            address,
-            Account {
-                lamports: entry.lamports,
-                data,
-                owner,
-                executable: false,
-                rent_epoch: entry.rent_epoch,
-            },
-        )
-        .map_err(|_| "Cannot load replay account.")?;
-    }
-    let result = svm
-        .send_transaction(tx)
-        .map_err(|err| format!("Offline replay failed: {:?}", err.err))?;
-    let mut balances = BTreeMap::new();
-    for address in addresses {
-        let key = Address::from_str(address).map_err(|_| "Invalid result account.")?;
-        balances.insert(
-            address.clone(),
-            svm.get_account(&key)
-                .map(|account| account.lamports)
-                .unwrap_or(0),
+    // Legacy rehearsal approvals retain their stricter program-loading policy.
+    // Generic review can inspect bundled programs but cannot become an approval.
+    if snapshot.values().any(|account| account.executable) {
+        return Err(
+            "Downloaded executable programs are not enabled in this approval profile.".into(),
         );
     }
+    let _ = tx; // Deserialize before starting an SDK worker.
+    let output = vow_runtime::execute(
+        transaction_hex,
+        snapshot
+            .iter()
+            .map(|(key, value)| (key.clone(), Some(value.clone())))
+            .collect(),
+        addresses.to_vec(),
+        None,
+    )?;
+    if !output.result["err"].is_null() {
+        return Err(format!(
+            "Offline simulation failed: {}",
+            output.result["err"]
+        ));
+    }
     Ok(ReplayResult {
-        engine: "LiteSVM 0.18.1 · offline / signature and blockhash checks disabled".into(),
-        compute_units: result.compute_units_consumed,
-        logs: result.logs,
-        balances,
+        engine: "Surfpool SDK 1.7.0 · offline / signature and blockhash checks disabled".into(),
+        compute_units: output.result["unitsConsumed"]
+            .as_u64()
+            .ok_or("Missing compute usage.")?,
+        logs: serde_json::from_value(output.result["logs"].clone())
+            .map_err(|_| "Invalid runtime logs.")?,
+        balances: output.balances,
     })
 }
 
@@ -113,8 +80,15 @@ impl ReproductionBundle {
     pub fn verify(&self, wire: &str, addresses: &[String]) -> Result<ReplayResult, String> {
         use sha2::{Digest, Sha256};
         let bytes = hex::decode(wire).map_err(|_| "Invalid replay bytes.")?;
-        if self.format != "vow.prototype.reproduction.v1"
-            || self.runtime_fingerprint != "litesvm-0.18.1-agave-4.3.2"
+        if !matches!(
+            self.expected.engine.as_str(),
+            "LiteSVM 0.18.1 · offline / signature and blockhash checks disabled"
+                | "Surfpool SDK 1.7.0 · offline / signature and blockhash checks disabled"
+        ) || self.format != "vow.prototype.reproduction.v1"
+            || !matches!(
+                self.runtime_fingerprint.as_str(),
+                "litesvm-0.18.1-agave-4.3.2" | "surfpool-sdk-1.7.0-agave-4.3.2"
+            )
             || self.source != "synthetic_fixture"
             || self.signature_checks
             || self.blockhash_checks
@@ -144,11 +118,101 @@ impl ReproductionBundle {
             return Err("The recorded profile is too large.".into());
         }
         let result = replay(wire, &self.snapshot, addresses)?;
-        if result != self.expected {
+        // Engine display labels changed when the legacy adapter moved to the SDK.
+        // Compare the execution outputs; all older evidence remains untrusted input.
+        if result.compute_units != self.expected.compute_units
+            || result.logs != self.expected.logs
+            || result.balances != self.expected.balances
+        {
             return Err(
                 "Offline replay differs from the recorded result. Approval is blocked.".into(),
             );
         }
         Ok(result)
+    }
+}
+
+/// Simulation evidence is untrusted RPC-derived review context, never signing authority.
+/// Validate its byte/network binding before displaying or retaining any of it.
+pub fn validate_simulation(
+    value: &serde_json::Value,
+    wire: &str,
+    chain: &str,
+    genesis: &str,
+) -> Result<(), String> {
+    use serde_json::Value;
+    use sha2::{Digest, Sha256};
+    let bytes = hex::decode(wire).map_err(|_| "Invalid simulation transaction.")?;
+    let encoded = serde_json::to_vec(value).map_err(|_| "Invalid simulation evidence.")?;
+    if encoded.len() > 6 * 1024 * 1024
+        || value["format"] != "vow.simulation.v1"
+        || value["chain"] != chain
+        || value["genesis_hash"] != genesis
+        || value["wire_digest"] != hex::encode(Sha256::digest(&bytes))
+        || !matches!(
+            value["state_source"].as_str(),
+            Some("rpc_snapshot_non_atomic" | "synthetic_fixture")
+        )
+        || value["signature_checks"] != false
+        || value["blockhash_checks"] != false
+        || !value["result"].is_object()
+        || value["result"].get("err").is_none()
+        || !value["snapshot"].is_object()
+        || value["rpc_slot_start"].as_u64().is_none()
+        || value["rpc_slot_end"].as_u64().is_none()
+        || value["rpc_slot_end"].as_u64() < value["rpc_slot_start"].as_u64()
+        || value["snapshot"]
+            .as_object()
+            .map_or(usize::MAX, |v| v.len())
+            > 1024
+    {
+        return Err("Mismatched, malformed or oversized simulation evidence.".into());
+    }
+    for (address, account) in value["snapshot"].as_object().ok_or("Missing snapshot.")? {
+        Address::from_str(address).map_err(|_| "Invalid fixture address.")?;
+        if account == &Value::Null {
+            continue;
+        }
+        let account: AccountSnapshot =
+            serde_json::from_value(account.clone()).map_err(|_| "Invalid account fixture.")?;
+        Address::from_str(&account.owner).map_err(|_| "Invalid fixture owner.")?;
+        base64::prelude::BASE64_STANDARD
+            .decode(&account.data)
+            .map_err(|_| "Invalid fixture bytes.")?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod simulation_evidence_tests {
+    use super::*;
+    use serde_json::json;
+    use sha2::{Digest, Sha256};
+    #[test]
+    fn generic_evidence_is_bound_to_wire_and_network_without_authorizing_execution() {
+        let valid = json!({"format":"vow.simulation.v1","chain":"solana:devnet","genesis_hash":"devnet-genesis",
+            "wire_digest":hex::encode(Sha256::digest([0u8])),"state_source":"rpc_snapshot_non_atomic",
+            "signature_checks":false,"blockhash_checks":false,"rpc_slot_start":10,"rpc_slot_end":12,
+            "result":{"err":null,"logs":[],"unitsConsumed":10},"snapshot":{}});
+        validate_simulation(&valid, "00", "solana:devnet", "devnet-genesis").unwrap();
+        assert!(validate_simulation(&valid, "01", "solana:devnet", "devnet-genesis").is_err());
+        assert!(validate_simulation(&valid, "00", "solana:mainnet", "devnet-genesis").is_err());
+        assert!(validate_simulation(&valid, "00", "solana:devnet", "wrong-genesis").is_err());
+        for (field, bad) in [
+            ("signature_checks", json!(true)),
+            ("blockhash_checks", json!(true)),
+            ("rpc_slot_end", json!(9)),
+            ("snapshot", json!([])),
+            ("result", json!({})),
+        ] {
+            let mut tampered = valid.clone();
+            tampered[field] = bad;
+            assert!(
+                validate_simulation(&tampered, "00", "solana:devnet", "devnet-genesis").is_err()
+            );
+        }
+        let mut failed = valid.clone();
+        failed["result"]["err"] = json!({"InstructionError":[0,"Custom"]});
+        validate_simulation(&failed, "00", "solana:devnet", "devnet-genesis").unwrap();
     }
 }

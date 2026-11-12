@@ -10,7 +10,7 @@ crate-type = ["staticlib", "rlib"]
 [dependencies]
 vow-core = { path = "../core" }
 serde_json.workspace = true
+vow-simulation = { path = "../simulation" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-vow-simulation = { path = "../simulation" }
 vow-ledger = { path = "../ledger" }

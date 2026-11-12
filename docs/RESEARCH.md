@@ -475,3 +475,17 @@ this signing application.
 
 Sources: [Supporting associated domains](https://developer.apple.com/documentation/xcode/supporting-associated-domains),
 [Associated Domains entitlement](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.developer.associated-domains).
+
+## Apple nearby file transport (2026-11-11)
+
+[Handoff](https://developer.apple.com/documentation/foundation/implementing-handoff-in-your-app)
+can resume an activity and establish continuation streams. It requires a user
+continuation action. [Multipeer Connectivity](https://developer.apple.com/documentation/multipeerconnectivity)
+provides nearby discovery, messaging and file transfer across app instances. Vow
+uses it for explicit foreground receiving, with application pairing and encryption
+in addition to required MCSession encryption. It does not infer trusted identity
+from a peer's display name.
+
+[External storage on iPad](https://support.apple.com/en-lb/guide/ipad/ipad75b7b23f/ipados)
+is available through Files and supported document pickers. A USB-C drive formatted
+as exFAT or APFS can transport the same `.vow` while Wi-Fi and Bluetooth remain off.

@@ -14,3 +14,6 @@
 | [0010](0010-separate-personal-identities-and-share-native-design.md) | Separate personal identities from organization registration and share native design | accepted |
 | [0011](0011-automatically-use-confirmed-factory-piv-pin.md) | Automatically use a metadata-confirmed factory PIV PIN | accepted |
 | [0012](0012-provision-piv-on-ipad-without-native-enrollment.md) | Prepare direct PIV signing on iPad without new native enrollment | accepted |
+| [0013](0013-pair-nearby-devices-for-review-transfer.md) | Pair nearby devices for encrypted review-file delivery | accepted |
+| [0014](0014-separate-generic-simulation-from-signing-decoders.md) | Separate generic simulation from signing decoder coverage | accepted |
+| [0015](0015-share-surfpool-runtime-between-apple-clients.md) | Share the offline Surfpool SDK runtime between Apple clients | accepted |

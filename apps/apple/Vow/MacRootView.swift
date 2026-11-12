@@ -12,7 +12,7 @@
       case .review: "Review ceremony"
       case .requests: "Requests"
       case .profiles: "Profiles"
-      case .browser: "Apps"
+      case .browser: "Browser"
       }
     }
     var symbol: String {
@@ -47,9 +47,6 @@
       let selected = selection ?? .overview
       NavigationSplitView {
         List(selection: $selection) {
-          WorkspaceIdentityHeader(
-            model: model,
-            onCreate: { creatingWorkspace = .organization }, didSelect: { selection = .overview })
           Section("Organization") {
             ForEach([MacSection.overview, .members, .safeguards, .review]) { page in
               NavigationLink(value: page) { Label(page.title, systemImage: page.symbol) }
@@ -63,23 +60,25 @@
               Label("Profiles", systemImage: "person.crop.rectangle.stack")
             }.accessibilityIdentifier("mac-profiles")
             NavigationLink(value: MacSection.requests) { Label("Requests", systemImage: "tray") }
-            NavigationLink(value: MacSection.browser) { Label("Apps", systemImage: "globe") }
+            NavigationLink(value: MacSection.browser) { Label("Browser", systemImage: "globe") }
           }
         }
         .listStyle(.sidebar)
         .navigationSplitViewColumnWidth(min: 220, ideal: 245, max: 300)
         .safeAreaInset(edge: .bottom) {
-          VStack(alignment: .leading, spacing: 7) {
-            Text("Prototype mode · Identity verification unavailable").font(.caption2)
-              .foregroundStyle(
-                .secondary)
-          }.frame(maxWidth: .infinity, alignment: .leading).padding(20)
+          OrganizationSwitcher(
+            model: model, onCreate: { creatingWorkspace = .organization },
+            didSelect: { selection = .overview }
+          )
+          .frame(maxWidth: .infinity)
+          .padding(.vertical, 8)
+          .background(.bar)
         }
       } detail: {
         Group {
           if let state = model.state {
             if selected == .profiles {
-              ProfilesView(model: model).navigationTitle("Profiles")
+              ProfilesView(model: model)
             } else if selected == .overview {
               WorkspaceDashboard(
                 model: model, coordinator: true,
@@ -110,7 +109,7 @@
               description: Text(model.error ?? "Restart the application."))
           }
         }
-        .navigationTitle(selected.title)
+        .navigationTitle("")
         .toolbar {
           ToolbarItemGroup(placement: .primaryAction) {
             if let state = model.state {
@@ -183,7 +182,7 @@
       .sheet(isPresented: $ledgerApproval) { LedgerApprovalView(model: model) }
       .sheet(item: $model.inspection) { inspection in
         TransactionInspectionView(model: model, inspection: inspection).frame(
-          minWidth: 760, minHeight: 700)
+          minWidth: 960, idealWidth: 1100, minHeight: 700, idealHeight: 780)
       }
       .sheet(item: $creatingWorkspace) { kind in
         WorkspaceNameSheet(model: model, kind: kind) {

@@ -40,7 +40,7 @@ struct WorkspaceDashboard: View {
                   state.awaitingApproval
                     ? state.proposal?.title ?? state.projectName
                     : coordinator
-                      ? "Prepare a transaction in Apps, or import a request file."
+                      ? "Prepare a transaction in Browser, or import a request file."
                       : "Import a request when you’re ready to review it."
                 )
                 .foregroundStyle(.secondary)
@@ -72,7 +72,7 @@ struct WorkspaceDashboard: View {
           Text("Projects").font(.title3.weight(.semibold))
           Spacer()
           if let createProject {
-            Button("New Project", systemImage: "plus", action: createProject).font(.subheadline)
+            Button(action: createProject) { Image(systemName: "plus.circle") }.buttonStyle(.plain).accessibilityLabel("New project")
               .disabled(state.organizationId.isEmpty)
           }
         }
@@ -162,12 +162,14 @@ struct WorkspaceIdentityHeader: View {
   var didSelect: () -> Void = {}
   var body: some View {
     VStack(alignment: .leading, spacing: 14) {
-      Image("VowGlyph").resizable().scaledToFit()
-        .frame(width: 56, height: 56)
-        .frame(width: 96, height: 96)
-        .background(.black.opacity(0.30), in: Circle())
-        .frame(maxWidth: .infinity)
-        .accessibilityLabel("Vow")
+      #if os(iOS)
+        Image("VowGlyph").resizable().scaledToFit()
+          .frame(width: 56, height: 56)
+          .frame(width: 96, height: 96)
+          .background(.black.opacity(0.30), in: Circle())
+          .frame(maxWidth: .infinity)
+          .accessibilityLabel("Vow")
+      #endif
       OrganizationSwitcher(model: model, onCreate: onCreate, didSelect: didSelect)
         .foregroundStyle(.secondary)
     }.padding(.vertical, 12).listRowSeparator(.hidden)

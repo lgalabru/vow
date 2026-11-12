@@ -5,8 +5,9 @@ Run from the repository root: python3 scripts/make-icon.py (needs Pillow).
 
 Writes:
   apps/apple/Vow/AppIcon.icon           the Icon Composer document Xcode ships
-                                        (iPadOS and macOS 26: one glass layer
+                                        (iPadOS 26: one glass layer
                                         over an indigo fill)
+  apps/apple/Vow/MacAppIcon.icon        macOS: transparent V over automatic system fill
   apps/apple/Vow/Assets.xcassets/AppIcon.appiconset
                                         flat renditions of the same design
   apps/web/public/vow-mark.png          the icon on the site's closing panel
@@ -14,7 +15,9 @@ Writes:
   apps/web/src/app/icon.png             the site's favicon
 """
 
+import argparse
 import json
+import shutil
 import math
 from pathlib import Path
 
@@ -23,6 +26,7 @@ from PIL import Image, ImageDraw, ImageFilter
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "docs/assets/icon.png"
 ICON = ROOT / "apps/apple/Vow/AppIcon.icon"
+MAC_ICON = ROOT / "apps/apple/Vow/MacAppIcon.icon"
 ICONSET = ROOT / "apps/apple/Vow/Assets.xcassets/AppIcon.appiconset"
 WEB = ROOT / "apps/web"
 
@@ -116,6 +120,16 @@ def mac(tile: Image.Image) -> Image.Image:
     return shadow
 
 
+def write_mac_document() -> None:
+    """Use the transparent foreground with Icon Composer's system light/dark fill."""
+    document = json.loads((ICON / "icon.json").read_text())
+    document["fill"] = "automatic"
+    document.pop("fill-specializations", None)
+    (MAC_ICON / "Assets").mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(ICON / "Assets/glyph.png", MAC_ICON / "Assets/glyph.png")
+    (MAC_ICON / "icon.json").write_text(json.dumps(document, indent=2) + "\n")
+
+
 def main() -> None:
     glyph = glyph_layer()
     tile = flat(glyph)
@@ -137,6 +151,7 @@ def main() -> None:
         "supported-platforms": {"squares": "shared"},
     }
     (ICON / "icon.json").write_text(json.dumps(document, indent=2) + "\n")
+    write_mac_document()
 
     # Flat renditions for the asset catalog.
     tile.save(ICONSET / "AppIcon-iPad.png")
@@ -157,4 +172,10 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--mac-only", action="store_true", help="Update only the adaptive macOS Icon Composer document")
+    args = parser.parse_args()
+    if args.mac_only:
+        write_mac_document()
+    else:
+        main()

@@ -7,11 +7,11 @@ publish.workspace = true
 [dependencies]
 vow-core = { path = "../core" }
 vow-replay = { path = "../replay" }
+vow-runtime = { path = "../runtime" }
 serde_json.workspace = true
 hex.workspace = true
 base64 = "0.22.1"
 
-[target.'cfg(target_os = "macos")'.dependencies]
 surfpool-sdk = { version = "=1.7.0", default-features = false }
 tokio = { version = "1", features = ["rt-multi-thread", "time"] }
 solana-rpc-client-api = "4.0"

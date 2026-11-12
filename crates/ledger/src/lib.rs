@@ -54,6 +54,25 @@ pub fn execute(request: &Value) -> Result<Value, String> {
         Err("Desktop Ledger HID is unavailable on this platform.".into())
     }
 }
+// The backend intentionally redacts Display. Translate device-state details into
+// fixed user guidance instead of exposing raw HID paths or arbitrary payloads.
+#[cfg(target_os = "macos")]
+fn desktop_error(error: solana_keychain::SignerError) -> String {
+    use solana_keychain::SignerError;
+    match error {
+        SignerError::NotAvailable(detail) if detail.contains("configuration format") =>
+            "This version of Vow cannot read the Ledger Solana app. Update Vow; your Ledger does not need to be reset.".into(),
+        SignerError::NotAvailable(detail) if detail.contains("devices connected") =>
+            "Connect only one Ledger, then retry.".into(),
+        SignerError::NotAvailable(detail) if detail.contains("already") || detail.contains("in progress") =>
+            "Finish the pending Ledger request, then retry.".into(),
+        SignerError::NotAvailable(_) =>
+            "Vow could not access your Ledger. Unlock it, open Solana, and close Ledger Live or other wallet apps. Check the USB connection, then retry.".into(),
+        SignerError::UserRejected(_) => "The request was declined on your Ledger. Retry when ready.".into(),
+        SignerError::SigningFailed(_) => "Ledger could not sign. Dismiss any pending prompt on the device, check the Solana app settings, then retry.".into(),
+        other => other.to_string(),
+    }
+}
 #[cfg(target_os = "macos")]
 fn desktop(request: &Value) -> Result<Value, String> {
     use serde_json::json;
@@ -102,7 +121,7 @@ fn desktop(request: &Value) -> Result<Value, String> {
         auto_open_app: false,
         ..LedgerConfig::default()
     })
-    .map_err(|e| e.to_string())?;
+    .map_err(desktop_error)?;
     let address = signer.pubkey().to_string();
     if action == "connect" {
         return Ok(
@@ -120,7 +139,7 @@ fn desktop(request: &Value) -> Result<Value, String> {
         .map_err(|_| "Cannot start the Ledger runtime.")?;
     let signature = runtime
         .block_on(signer.sign_message(message.expect("checked").as_bytes()))
-        .map_err(|e| e.to_string())?;
+        .map_err(desktop_error)?;
     Ok(
         json!({"address":address,"derivation_path":path,"signature_hex":hex::encode(signature.as_ref()),"scheme":"ledger_offchain_v0"}),
     )
@@ -160,6 +179,28 @@ mod tests {
         request["action"] = json!("sign_enrollment");
         request["derivation_path"] = json!("m/44'/501'/1'");
         assert!(validate(&request).is_err());
+    }
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn desktop_errors_explain_recovery_without_exposing_backend_details() {
+        use solana_keychain::SignerError;
+        let incompatible = desktop_error(SignerError::NotAvailable(
+            "configuration format unsupported".into(),
+        ));
+        assert!(incompatible.contains("Update Vow"));
+        assert!(incompatible.contains("does not need to be reset"));
+        let unavailable = desktop_error(SignerError::NotAvailable(
+            "private HID path /secret/device".into(),
+        ));
+        assert!(unavailable.contains("open Solana"));
+        assert!(!unavailable.contains("/secret/device"));
+        assert!(desktop_error(SignerError::UserRejected("private".into())).contains("declined"));
+        assert!(
+            desktop_error(SignerError::NotAvailable(
+                "2 Ledger devices connected".into()
+            ))
+            .contains("only one")
+        );
     }
     #[cfg(target_os = "macos")]
     #[test]

@@ -341,7 +341,7 @@
         Divider()
         BrowserWebView(session: session).frame(maxWidth: .infinity, maxHeight: .infinity)
       }
-      .navigationTitle("Apps")
+      .navigationTitle("")
       .sheet(item: $session.connection, onDismiss: { session.denyConnection() }) { request in
         VStack(alignment: .leading, spacing: 22) {
           Image(systemName: "globe").font(.system(size: 34)).foregroundStyle(.tint)

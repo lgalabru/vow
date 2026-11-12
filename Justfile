@@ -60,10 +60,10 @@ web-test:
 
 # Portable signature verification, enrollment, replay protection and C ABI tests.
 crypto-test:
-    cargo +stable test --locked -p vow-core -p vow-ffi -p vow-ledger --lib
+    cargo +stable test --locked -p vow-core -p vow-ffi -p vow-ledger -p vow-replay -p vow-runtime --lib
 
 crypto-lint:
-    cargo +stable clippy --locked -p vow-core -p vow-ffi -p vow-ledger --all-targets -- -D warnings
+    cargo +stable clippy --locked -p vow-core -p vow-ffi -p vow-ledger -p vow-replay -p vow-runtime --all-targets -- -D warnings
 
 crypto-fmt:
     cargo +stable fmt --all -- --check
@@ -71,3 +71,18 @@ crypto-fmt:
 # Exact envelope conformance against the PR-pinned desktop Ledger backend; no hardware I/O.
 ledger-test:
     cargo +stable test --locked -p vow-ledger --lib
+
+# Generic clipboard simulation against a local source fork; no public submission.
+simulation-test:
+    cargo +stable test --locked -p vow-simulation --lib
+
+nearby-test:
+    scripts/test-nearby-protocol.sh
+
+# Apple directory documents and bounded legacy import.
+document-test:
+    scripts/test-document-package.sh
+
+# Compile the shared SDK and C ABI for physical iPadOS.
+runtime-ios-check:
+    cargo +stable check --locked -p vow-ffi --target aarch64-apple-ios

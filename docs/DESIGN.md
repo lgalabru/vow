@@ -2,15 +2,17 @@
 
 Status: proposed production design, 2026-11-09. Native local prototypes implement a
 subset: sample enrollment, organizations, reusable quorums and projects, file export/import, full-screen iPad
-approval, optional local explanations, P-256 signing and Rust verification. Passport reading, pairing, durable storage and chain submission are
-not implemented. See [README.md](../README.md) to run the current applications.
+approval, optional local explanations, P-256 signing and Rust verification. Passport reading, durable organization storage and chain submission are
+not implemented. Personal profiles have local durable storage and nearby transfer uses paired devices. See [README.md](../README.md) to run the current applications.
 Open choices are tracked in [RFD 0001](rfd/0001-signing-and-enforcement.md).
 
 The connected Mac has a capture-only WKWebView wallet provider and native
 Review → Replay → Checks → Export preparation flow. Rust verifies the bounded
-unsigned SOL-transfer profile. The Mac embeds Surfpool; the iPad links only the
-offline LiteSVM replay layer. Reproduction fixtures are synthetic and are not chain
-proofs. File formats and limits are in [CONTRACTS.md](CONTRACTS.md).
+unsigned SOL-transfer profile. Both Apple clients execute snapshot replay through
+`vow-runtime`, which embeds Surfpool SDK 1.7.0. Vow has no separate LiteSVM adapter.
+Generic review restores bounded account fixtures and program data in a fresh offline
+fork. The SDK reconstructs its managed sysvars from the recorded slot and clock.
+Fixtures and runtime output are review context, never authenticated chain proofs. File formats and limits are in [CONTRACTS.md](CONTRACTS.md).
 
 Plain transaction dumps are a separate supported input. An installed wire inspector
 shows every instruction and its accounts. Payment Channels open/distribute layouts
@@ -18,6 +20,31 @@ are decoded from pinned program source. This inspector has no signing authority:
 missing account state, unresolved lookups, unknown instructions or missing guard
 verification cannot become an approval. Native file sharing offers raw bytes and
 an optional `.vow` companion envelope.
+
+Imported transaction files open the shared native review assistant. Landscape uses
+an instruction rail and a detail pane; portrait uses the full content width. The
+first step contains decoded instructions, local compute usage, account changes,
+logs and optional on-device explanations. Request metadata, profile selection and
+simulation actions sit in the compact footer so the inspector retains the available
+height. Account changes offer transaction or instruction scope, exact field-level
+red/green diffs, complete before/after state and paginated raw bytes. Parsed states
+and original bytes come from the same local SDK execution. Results bind the full
+normalized snapshot context as well as wire bytes and network. A floating bottom-right status displays
+an elapsed or unknown signing window, or an estimated countdown and Continue.
+A green countdown does not establish blockhash validity on chain. Generic files
+remain blocked at authorization until a verified multisig and guard binding exists.
+Bound rehearsal requests use this same first step before the existing handwriting,
+security-key, biometric or Ledger authorization flow. Generic imports do not
+manufacture those bindings.
+
+The Mac sidebar anchors its organization switcher at the bottom. Its native popup
+menu spans the sidebar width and shows organization icons; creation uses a compact
+name-and-icon dialog with standard keyboard actions. Project creation
+uses the Projects header's hover control. Deletion cancels pending authorization and
+removes that project's queued requests while retaining shared enrollment, profiles,
+quorums and signed history. It never closes on-chain accounts. Organization images
+are local presentation metadata in UserDefaults, separate from ceremony and policy
+preimages. They are not yet shared through ceremony exports or iCloud.
 
 Each project pins Devnet or Mainnet and its genesis hash. All actions and approval
 preimages bind that identity. Explicit Mac RPC reads use that project's fixed endpoint
@@ -722,3 +749,59 @@ acknowledgements after management rotation, recovery rotation and key generation
 failed journal storage, occupied locations and final-retry protections. Simulator
 onboarding tests exercise the direct setup UI but do not certify physical firmware
 behavior. See [ADR 0012](adr/0012-provision-piv-on-ipad-without-native-enrollment.md).
+
+## Clipboard preparation and nearby transfer (2026-11-11)
+
+The Mac menu-bar extra reads the clipboard only after Prepare & Send Clipboard.
+The user selects Devnet or Mainnet explicitly. The Rust inspector accepts canonical
+legacy and v0 transaction bytes, including existing signatures, multiple programs
+and lookup-table references. Instruction decoder coverage does not limit this
+preparation path. It does not manufacture signatures, rewrite blockhashes or infer
+a network from raw bytes.
+
+The embedded Surfnet fork reads accounts from the selected network's fixed RPC
+after verifying its genesis hash. It aligns the fork clock to the observed source
+slot and available block time, recording a Mac-clock fallback explicitly. It
+simulates the exact transaction with signature and blockhash checks disabled.
+Before any follow-up execution, it exports the simulation's cached pre-state,
+including program and lookup-table accounts. Successful simulations also receive
+an instruction-depth profile from a follow-up execution in the isolated fork.
+That profile has a separate context because local execution can advance the clock.
+No transaction is submitted to the source RPC. Failed runtime results are retained
+as review evidence; infrastructure failures stop preparation.
+
+The result is an inspection-only `.vow` file with bounded `vow.simulation.v1`
+evidence. Account reads can span slots and are not authenticated chain state.
+The iPad verifies the wire/network binding and displays the Mac result as
+unreproduced evidence. Generic files do not inherit the older synthetic transfer
+replay's verification claim. Unknown instructions remain blocked for approval.
+Files exceeding 8 MB fail preparation rather than silently dropping fixtures.
+
+Nearby transfer uses Multipeer Connectivity with required transport encryption.
+A separate device-only Keychain identity signs an ephemeral X25519 handshake.
+Both peers commit to their hello before either reveals it, then verify signatures
+binding both roles, identities, ephemeral keys and nonces. First pairing requires
+comparing a six-digit code on both screens and confirming on both devices. This
+prevents adapting a nonce after seeing the other peer's hello. Paired public keys
+are pinned. Advertised names and fingerprints are discovery hints, not identity
+proofs. A known-device advertisement must prove the expected pinned identity.
+
+ChaCha20-Poly1305 protects application messages independently of Multipeer TLS.
+Each direction has a strict session-local counter. The sender checks a receipt
+against the exact file digest; the receiver closes the channel after receipt
+acknowledgement. A fresh handshake derives fresh keys for each connection.
+Discovery and receiving are time-bounded, foreground, explicit operations.
+Pairing can be forgotten independently of signing profiles; Full Reset deletes
+transport identity and pairing records too. This protocol still requires an
+independent security review before production use.
+
+The iPad receiver is separate from the signing workspace and is available from
+Settings or the network-lock screen. While it is open or transport is active,
+Vow cancels pending authorization and removes access to signing. Incoming files
+are queued for import until the receiver closes and the normal network-path gate
+reports offline. A successful delivery never authorizes a transaction.
+
+Save, drag-and-drop and AirDrop remain alternative transports. A USB storage drive
+can carry the same file through the system document picker without enabling
+radios. Vow copies imported bytes into local review state, so the drive can be
+removed before a YubiKey uses the iPad's USB-C port.

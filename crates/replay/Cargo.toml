@@ -10,8 +10,7 @@ serde_json.workspace = true
 hex.workspace = true
 sha2.workspace = true
 base64 = "0.22.1"
-litesvm = "=0.18.1"
-solana-account = "4.5"
+vow-runtime = { path = "../runtime" }
 solana-address = "2.2"
 solana-transaction-replay = { package = "solana-transaction", version = "4.2", features = ["wincode"] }
 wincode = "0.6.1"

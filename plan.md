@@ -1,8 +1,20 @@
 # Vow implementation plan
 
-Updated: 2026-11-10. Status: native prototypes and a working compatibility spike.
+Updated: 2026-11-11. Status: native prototypes and a working compatibility spike.
 Use case and architecture: [docs/DESIGN.md](docs/DESIGN.md).
 Security gates: [docs/SECURITY.md](docs/SECURITY.md).
+
+## Transaction review and navigation pass
+
+- [x] Both platforms use Surfpool SDK through shared `vow-runtime` and C FFI for snapshot execution and instruction profiling.
+- [x] Shared first approval step with instruction navigation, compute usage, local account changes and byte inspection, logs, profile selection and on-device explanations. Bound requests continue to the existing hardware authorization flow.
+- [x] Compact review footer holds request title, network, simulation status, profile and countdown; no oversized request header. Physical iPad has no sample-loading button or empty-project network warning.
+- [x] Parsed before/after state diffs with red removals, green additions, transaction/instruction scope, changed-field filtering, full JSON and paginated byte diffs. Simulation results bind the complete snapshot context.
+- [x] Red elapsed-window status, unknown-expiry status and green estimated countdown with Continue. No timestamp is invented for raw dumps.
+- [x] Compact menu-bar clipboard delivery, bottom organization switcher, organization image picker, hover project creation, project deletion and Browser naming.
+- [ ] Bind generic imports to an installed multisig/guard policy and connect their second step to actual authorization. The UI currently explains this block; simulation does not unlock signing.
+- [ ] Durable organization/project catalog and organization artwork sync. Artwork is local presentation metadata.
+- [ ] Verify local Foundation Models inference on the physical iPad after its model download. No cloud fallback is configured.
 
 ## Native prototype delivered
 
@@ -418,3 +430,16 @@ migration/provisioning exploration is deferred while this model is considered.
 - [x] Fault-test interrupted writes, failed journal persistence, occupied keys and final recovery retry.
 - [ ] Verify fresh-key provisioning with the owner's physical YubiKey.
 - [ ] Add a secure recovery export for app-managed PIV administrative secrets before production release.
+
+## Clipboard and nearby review (2026-11-11)
+
+- [x] Mac menu-bar action with explicit network selection and user-initiated clipboard access.
+- [x] Generic legacy/v0 simulation with preserved signatures, arbitrary programs, multiple instructions and lookup tables.
+- [x] Source genesis checks, recorded fork clock, state fixtures, runtime errors and separately labeled execution profile.
+- [x] Multipeer discovery, commit/reveal pairing, possession proofs, encrypted counters and file-digest receipts.
+- [x] Private pairing storage, forget-pairing control and full-reset cleanup.
+- [x] iPad receive mode queues imports until transport closes and the normal offline gate passes.
+- [x] Portable protocol, arbitrary-message, multi-program simulation and receiver UI tests.
+- [ ] Physical Mac-to-iPad nearby acceptance and Local Network permission testing.
+- [ ] Independent protocol review before production.
+- [ ] Generic offline reproduction with an approved executable-loading policy. Generic simulation evidence currently grants no signing authority.

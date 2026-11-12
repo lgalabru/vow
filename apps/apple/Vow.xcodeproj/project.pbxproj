@@ -251,11 +251,13 @@
 			buildSettings = {
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=macosx*]" = MacAppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = "$(VOW_IPAD_ENTITLEMENTS)";
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = "Config/Vow-Simulator.entitlements";
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "Config/Vow-mac.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 9;
 				"ENABLE_APP_SANDBOX[sdk=macosx*]" = YES;
 				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
 				"ENABLE_INCOMING_NETWORK_CONNECTIONS[sdk=macosx*]" = YES;
@@ -287,6 +289,12 @@
 				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/RustCore";
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 2;
+				VOW_DOCUMENT_ICON_320 = VowReviewDocument320.png;
+				"VOW_DOCUMENT_ICON_320[sdk=iphoneos*]" = VowDocumentBadge320.png;
+				"VOW_DOCUMENT_ICON_320[sdk=iphonesimulator*]" = VowDocumentBadge320.png;
+				VOW_DOCUMENT_ICON_64 = VowReviewDocument64.png;
+				"VOW_DOCUMENT_ICON_64[sdk=iphoneos*]" = VowDocumentBadge64.png;
+				"VOW_DOCUMENT_ICON_64[sdk=iphonesimulator*]" = VowDocumentBadge64.png;
 				"VOW_RUST_TARGET[sdk=iphoneos*]" = "aarch64-apple-ios";
 				"VOW_RUST_TARGET[sdk=iphonesimulator*]" = "aarch64-apple-ios-sim";
 				"VOW_RUST_TARGET[sdk=macosx*]" = "aarch64-apple-darwin";
@@ -299,11 +307,13 @@
 			buildSettings = {
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				"ASSETCATALOG_COMPILER_APPICON_NAME[sdk=macosx*]" = MacAppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = "$(VOW_IPAD_ENTITLEMENTS)";
 				"CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]" = "Config/Vow-Simulator.entitlements";
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "Config/Vow-mac.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 9;
 				"ENABLE_APP_SANDBOX[sdk=macosx*]" = YES;
 				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
 				"ENABLE_INCOMING_NETWORK_CONNECTIONS[sdk=macosx*]" = YES;
@@ -335,6 +345,12 @@
 				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/RustCore";
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 2;
+				VOW_DOCUMENT_ICON_320 = VowReviewDocument320.png;
+				"VOW_DOCUMENT_ICON_320[sdk=iphoneos*]" = VowDocumentBadge320.png;
+				"VOW_DOCUMENT_ICON_320[sdk=iphonesimulator*]" = VowDocumentBadge320.png;
+				VOW_DOCUMENT_ICON_64 = VowReviewDocument64.png;
+				"VOW_DOCUMENT_ICON_64[sdk=iphoneos*]" = VowDocumentBadge64.png;
+				"VOW_DOCUMENT_ICON_64[sdk=iphonesimulator*]" = VowDocumentBadge64.png;
 				"VOW_RUST_TARGET[sdk=iphoneos*]" = "aarch64-apple-ios";
 				"VOW_RUST_TARGET[sdk=iphonesimulator*]" = "aarch64-apple-ios-sim";
 				"VOW_RUST_TARGET[sdk=macosx*]" = "aarch64-apple-darwin";

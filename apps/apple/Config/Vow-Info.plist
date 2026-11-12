@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Find nearby Vow devices and transfer review files over the local network. Signing on iPad is locked during transfer.</string>
+    <key>NSBonjourServices</key>
+    <array><string>_vow-review._tcp</string></array>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Connect to your Ledger Nano X, Nano Gen5 or Flex to verify its account and approve signing requests. Vow does not use Bluetooth for internet access.</string>
 	<key>VowNativeSecurityKeyDomain</key>
@@ -11,12 +15,14 @@
 		<dict>
 			<key>CFBundleTypeName</key>
 			<string>Vow transaction</string>
+			<key>LSTypeIsPackage</key>
+			<false/>
 			<key>CFBundleTypeIconFile</key>
-			<string>VowDocument.icns</string>
+			<string>VowReviewDocument.icns</string>
 			<key>CFBundleTypeIconFiles</key>
 			<array>
-				<string>VowDocument64.png</string>
-				<string>VowDocument320.png</string>
+				<string>$(VOW_DOCUMENT_ICON_64)</string>
+				<string>$(VOW_DOCUMENT_ICON_320)</string>
 			</array>
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
@@ -49,16 +55,16 @@
 		<dict>
 			<key>UTTypeConformsTo</key>
 			<array>
-				<string>public.json</string>
+				<string>public.data</string>
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Vow transaction</string>
 			<key>UTTypeIconFile</key>
-			<string>VowDocument.icns</string>
+			<string>VowReviewDocument.icns</string>
 			<key>UTTypeIconFiles</key>
 			<array>
-				<string>VowDocument64.png</string>
-				<string>VowDocument320.png</string>
+				<string>$(VOW_DOCUMENT_ICON_64)</string>
+				<string>$(VOW_DOCUMENT_ICON_320)</string>
 			</array>
 			<key>UTTypeIdentifier</key>
 			<string>org.vow.transaction</string>
@@ -70,7 +76,7 @@
 				</array>
 				<key>public.mime-type</key>
 				<array>
-					<string>application/vnd.vow+json</string>
+					<string>application/vnd.vow</string>
 				</array>
 			</dict>
 		</dict>

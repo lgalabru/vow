@@ -62,7 +62,7 @@ Automated header generation and a packaged XCFramework remain future work.
 | `vow_session_create_v1` | Returns an independent opaque numeric session. |
 | `vow_session_destroy_v1` | Drops its in-memory state and pending approval. |
 | `vow_dispatch_v1` | Borrows a valid input pointer and length for the call; returns owned UTF-8 JSON with `ok`, `data` or `error`. |
-| `vow_profile_transaction_v1` | Bounded 16 KB native request; Mac-only SDK execution, owned JSON envelope, no session/key access. |
+| `vow_profile_transaction_v1` | Bounded 68 KB native request; Mac-only SDK execution, owned JSON envelope, no session/key access. |
 | `vow_string_free_v1` | Frees a dispatch result exactly once; null is permitted. |
 
 Swift decodes renderable snapshots and owns presentation state. Rust stores the
@@ -456,3 +456,111 @@ finishes a pending authorized reset before loading identities. The public archiv
 optional `workspaceCleared` flag only controls workspace initialization; it has no
 key-deletion authority. Keychain deletion failures fail closed without silently
 creating a replacement. User confirmation precedes this operation.
+
+## Generic clipboard review and nearby transport
+
+`vow_profile_transaction_v1` also accepts:
+
+```json
+{"mode":"clipboard","chain":"solana:devnet","data":"<serialized transaction as hex, base64 or JSON>"}
+```
+
+The native request limit is 68 KB; clipboard text is limited to 64 KB. The
+selected chain must be `solana:devnet` or `solana:mainnet`; RPC endpoints come
+from the fixed chain configuration. Explicit conflicting chain/genesis metadata
+is rejected. Existing signatures and transaction bytes are preserved.
+
+The result has `filename`, `package`, `wire_digest`, `network_explicit`, `chain`,
+`instruction_count`, `simulation` and `execution_ready: false`. `package` uses
+`vow.prototype.inspection.v1`, with optional `simulation` evidence:
+
+- `format: vow.simulation.v1`, chain/genesis and exact transaction SHA-256.
+- `rpc_slot_start`, `rpc_slot_end`, `observed_at_unix_ms` and non-atomic state source.
+- `fork_slot`, `clock_unix_ms` and `clock_source`, either RPC block time or Mac clock.
+- `signature_checks: false`, `blockhash_checks: false` and the runtime `result`.
+- `snapshot`, including program/lookup accounts, and optional instruction-depth
+  `profile`. `profile_context: followup_local_execution` distinguishes that later
+  execution from the first simulation and its pre-state.
+
+Evidence is capped at 6 MB and 1,024 snapshot accounts; the entire file is capped
+at 8 MB. The importer checks byte/network binding and fixture schema. Evidence is
+untrusted review context, not independent replay verification or approval authority.
+No blockhash observation is invented for bare transaction bytes.
+
+Nearby discovery uses Bonjour `_vow-review._tcp`. The application protocol uses
+one-byte packet kinds: commitment, hello, transcript signature and sealed message.
+A hello contains protocol version 1, role, 32-byte Ed25519 public identity,
+32-byte X25519 ephemeral public key and 32-byte random nonce. A domain-separated
+SHA-256 commitment precedes reveal. The signed transcript fixes Mac/iPad ordering.
+An X25519/HKDF-SHA256 key encrypts messages with ChaCha20-Poly1305. Confirmation,
+file payload, file-digest receipt and receipt acknowledgement all use that key.
+Counters are strictly increasing per direction and per session. First pairing
+requires matching codes and confirmation at both endpoints; later connections
+must prove the stored public key. Names never authorize delivery.
+
+## Native Apple document package, version 1
+
+Status: implemented prototype, 2026-11-11.
+
+A `.vow` document is a regular file containing a flattened native `FileWrapper`,
+declared as `org.vow.transaction` conforming to `public.data`. Its frame is the
+8-byte magic `56 4f 57 44 4f 43 00 01`, a 32-bit little-endian body length, then
+Foundation's `serializedRepresentation` of the directory wrapper. Require exact
+length and supported version before decoding. The decoded root must be a directory.
+This gives Files, AirDrop and file providers a real byte size instead of an
+unknown directory-package size. Finder and Files present it as one document.
+Mac uses a complete document-page icon; iPad uses the V badge on the OS page.
+
+- `Manifest.json`: `format: vow.document.v1` and a `files` map containing each
+  member's exact byte `size` and lowercase SHA-256 `sha256`.
+- `Request.json`: the exact existing Rust JSON payload, preserved byte for byte.
+- `Transaction.bin`: optional exact transaction bytes extracted from that payload.
+- `Simulation.json`: optional simulation metadata and profile, excluding snapshot.
+- `Accounts.json`: optional simulation snapshot.
+
+The supporting files are derived copies. Import verifies their manifest hashes and
+agreement with `Request.json`, then passes only the original payload to Rust.
+Checksums provide integrity checking, not signer authentication or execution authority.
+No package changes a signing digest, signing gate, or offline requirement.
+
+Reject unknown members, symbolic links, nested directories, missing members, stale
+attachments and unsupported versions. Ignore only bounded regular `.DS_Store` and
+AppleDouble metadata files for known members, at most 64 KiB each. Bound the manifest to 16 KiB, the original
+payload to 8 MiB, and both the encoded document and materialized package to 16 MiB. Legacy directory
+packages remain readable, but new exports are flattened files. Existing flat
+JSON `.vow` files and simple transaction dumps remain readable. Nearby transfer
+still authenticates and encrypts the bounded original payload and reconstructs the
+native package at the receiver; it does not unpack an untrusted archive.
+
+
+## Shared snapshot execution
+
+`vow_profile_transaction_v1` accepts bounded UTF-8 JSON up to 9 MiB. The
+`mode: "offline"` request carries `chain` and the original `package` string.
+Rust validates the package, wire digest, selected chain and genesis, fixture
+encoding, and recorded clock before creating the SDK fork. No remote endpoint
+is accepted in this mode. The runtime limits wire bytes to 1,232, account entries
+to 1,024 and total encoded fixture data to 6 MiB. The SDK binds only to loopback
+and starts with `offline(true)` and no funded application payer.
+
+The result carries `engine`, `source: "local_snapshot_execution"`, `wire_digest`,
+`offline: true`, the simulation `result`, a separately obtained instruction
+`profile`, `account_states`, `review_context_digest`, and `fixture_count`. The context
+digest binds the complete normalized review package, including fixtures and clock;
+the wire digest alone does not distinguish two snapshots of the same transaction.
+Clients discard results when either context or selected chain changes.
+Profile account changes come from the follow-up
+local execution. Signature and blockhash checks are disabled, original wire bytes
+are preserved, and `execution_ready` remains false. Managed sysvars come from
+SDK clock reconstruction; they are not overwritten through account cheatcodes.
+The legacy rehearsal validator also uses this runtime but retains its narrower
+executable-loading policy and compares balances, compute usage and runtime logs.
+Old runtime display labels are accepted only for legacy evidence compatibility.
+
+`account_states` contains whole-transaction and per-instruction transitions. Each
+account has exact string-valued field diffs, normalized before/after JSON, change
+kind, data-change status and a decimal-string lamport delta. Parsed fields come
+from the same local execution profile with `jsonParsed` encoding; metadata must
+match its base64 counterpart. Unsupported account data retains its length/hash
+and the original profile bytes for a complete paginated hex diff. Large integers
+are preserved without conversion through floating point.

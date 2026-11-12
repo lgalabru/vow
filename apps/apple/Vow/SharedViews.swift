@@ -6,15 +6,18 @@ struct VowFile: FileDocument {
   var content: String
   init(_ content: String = "") { self.content = content }
   init(configuration: ReadConfiguration) throws {
-    guard let data = configuration.file.regularFileContents,
-      let content = String(data: data, encoding: .utf8)
+    let data = try VowDocument.read(configuration.file)
+    guard let content = String(data: data, encoding: .utf8)
     else {
       throw VowError(message: "This file couldn't be read.")
     }
     self.content = content
   }
   func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
-    FileWrapper(regularFileWithContents: Data(content.utf8))
+    if configuration.contentType.conforms(to: .vowTransaction) {
+      return try VowDocument.wrapper(Data(content.utf8))
+    }
+    return FileWrapper(regularFileWithContents: Data(content.utf8))
   }
 }
 

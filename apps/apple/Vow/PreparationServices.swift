@@ -1,8 +1,5 @@
 import Foundation
-
-#if os(macOS)
-  import VowCore
-#endif
+import VowCore
 
 struct ReplayOutput: Decodable {
   let engine: String
@@ -36,19 +33,38 @@ struct MetadataLocation: Decodable {
   let owner: String
   let chain: ChainContext
 }
-#if os(macOS)
-  enum NativeProfiler {
-    nonisolated static func profile(_ input: Data) async throws -> Data {
-      try await Task.detached(priority: .userInitiated) {
-        let result = input.withUnsafeBytes { raw in
-          vow_profile_transaction_v1(raw.bindMemory(to: UInt8.self).baseAddress, raw.count)
-        }
-        guard let result else { throw VowError(message: "The profiler could not start.") }
-        defer { vow_string_free_v1(result) }
-        return Data(String(cString: result).utf8)
-      }.value
+enum NativeProfiler {
+  nonisolated static func profile(_ input: Data) async throws -> Data {
+    try await NativeProfilingQueue.shared.profile(input)
+  }
+}
+/// Native profiling is blocking. Serialize forks and skip cancelled queued work;
+/// cancellation of a running FFI call discards its result rather than spawning more forks.
+private actor NativeProfilingQueue {
+  static let shared = NativeProfilingQueue()
+  private var tail: Task<Data, Error>?
+  func profile(_ input: Data) async throws -> Data {
+    try Task.checkCancellation()
+    let previous = tail
+    let job = Task.detached(priority: .userInitiated) {
+      if let previous { _ = try? await previous.value }
+      try Task.checkCancellation()
+      let result = input.withUnsafeBytes { raw in
+        vow_profile_transaction_v1(raw.bindMemory(to: UInt8.self).baseAddress, raw.count)
+      }
+      guard let result else { throw VowError(message: "The profiler could not start.") }
+      defer { vow_string_free_v1(result) }
+      return Data(String(cString: result).utf8)
+    }
+    tail = job
+    return try await withTaskCancellationHandler {
+      try await job.value
+    } onCancel: {
+      job.cancel()
     }
   }
+}
+#if os(macOS)
   @MainActor enum MetadataResolver {
     static func recentBlockhash(model: VowModel) async throws -> [String: Any] {
       guard let chain = model.state?.chain, let endpoint = URL(string: chain.rpcUrl) else {

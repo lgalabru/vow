@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct OrganizationSummary: Decodable, Identifiable {
   let id: String
@@ -27,34 +28,51 @@ enum WorkspaceCreation: String, Identifiable {
 }
 
 struct OrganizationSwitcher: View {
+  @AppStorage(OrganizationArtwork.key) private var artwork = "{}"
   @Bindable var model: VowModel
   var onCreate: (() -> Void)?
   var didSelect: () -> Void = {}
   var body: some View {
     if let state = model.state, !state.organizationId.isEmpty {
-      Menu {
-        Picker(
-          "Organization",
-          selection: Binding(
-            get: { model.state?.organizationId ?? "" },
-            set: { id in
-              if model.perform("select_organization", ["id": id]) { didSelect() }
-            })
-        ) {
-          ForEach(state.organizations) { organization in
-            Text(organization.name).tag(organization.id)
+      #if os(macOS)
+        MacOrganizationPicker(
+          organizations: state.organizations, selectedID: state.organizationId,
+          artwork: artwork,
+          onSelect: { id in
+            if model.perform("select_organization", ["id": id]) { didSelect() }
+          }, onCreate: onCreate
+        ).frame(maxWidth: .infinity).frame(height: 44)
+      #else
+        Menu {
+          Picker(
+            "Organization",
+            selection: Binding(
+              get: { model.state?.organizationId ?? "" },
+              set: { id in
+                if model.perform("select_organization", ["id": id]) { didSelect() }
+              })
+          ) {
+            ForEach(state.organizations) { organization in
+              Text(organization.name).tag(organization.id)
+            }
           }
+          if let onCreate {
+            Divider()
+            Button("New Organization…", systemImage: "plus", action: onCreate)
+          }
+        } label: {
+          HStack(spacing: 10) {
+            OrganizationMark(data: OrganizationArtwork.read(artwork, id: state.organizationId))
+            Text(state.organization).font(.subheadline.weight(.medium)).lineLimit(1)
+            Spacer(minLength: 4)
+            Image(systemName: "chevron.up.chevron.down").font(.system(size: 10, weight: .semibold))
+              .foregroundStyle(.secondary)
+          }.padding(.vertical, 4).contentShape(Rectangle())
         }
-        if let onCreate {
-          Divider()
-          Button("New Organization…", systemImage: "plus", action: onCreate)
-        }
-      } label: {
-        Label(state.organization, systemImage: "building.2")
-          .font(.subheadline).lineLimit(2).multilineTextAlignment(.leading)
-      }
-      .accessibilityLabel("Switch organization")
-      .accessibilityIdentifier("organizationSwitcher")
+        .menuStyle(.borderlessButton).menuIndicator(.hidden)
+        .accessibilityLabel("Switch organization")
+        .accessibilityIdentifier("organizationSwitcher")
+      #endif
     } else if let onCreate {
       Button("Create Organization", systemImage: "plus", action: onCreate)
         .font(.subheadline).accessibilityIdentifier("createOrganization")
@@ -66,6 +84,8 @@ struct ProjectSidebar: View {
   @Bindable var model: VowModel
   var onCreate: (() -> Void)?
   var didSelect: () -> Void = {}
+  @State private var hovering = false
+  @State private var deleting: ProjectSummary?
   var body: some View {
     if let state = model.state {
       Section {
@@ -73,26 +93,44 @@ struct ProjectSidebar: View {
           Button {
             if model.perform("select_project", ["id": project.id]) { didSelect() }
           } label: {
-            HStack {
-              Label(
-                project.name, systemImage: project.id == state.projectId ? "folder.fill" : "folder"
-              )
-              .foregroundStyle(project.id == state.projectId ? Color.accentColor : .primary)
+            HStack(spacing: 9) {
+              Image(systemName: "folder").frame(width: 18).foregroundStyle(.secondary)
+              Text(project.name).lineLimit(1)
               Spacer(minLength: 4)
               if project.id == state.projectId {
-                Image(systemName: "checkmark").font(.caption2.weight(.semibold)).foregroundStyle(
-                  .secondary)
+                Circle().fill(Color.accentColor).frame(width: 5, height: 5)
               }
-            }.contentShape(Rectangle())
-          }
-          .buttonStyle(.plain)
-          .accessibilityIdentifier("project-\(project.id)")
-        }
-        if let onCreate {
-          Button("New Project…", systemImage: "plus", action: onCreate)
+            }.padding(.vertical, 3).contentShape(Rectangle())
+          }.buttonStyle(.plain)
+            .accessibilityIdentifier("project-\(project.id)")
+            .contextMenu { Button("Delete Project…", role: .destructive) { deleting = project } }
         }
       } header: {
-        Text("Projects")
+        HStack {
+          Text("Projects")
+          Spacer()
+          if let onCreate {
+            Button(action: onCreate) { Image(systemName: "plus.circle").font(.system(size: 13)) }
+              .buttonStyle(.plain).help("New project").accessibilityLabel("New project")
+              #if os(macOS)
+                .opacity(hovering ? 1 : 0)
+              #endif
+          }
+        }.contentShape(Rectangle()).onHover { hovering = $0 }
+      }
+      .alert(
+        "Delete project?",
+        isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })
+      ) {
+        Button("Cancel", role: .cancel) { deleting = nil }
+        Button("Delete", role: .destructive) {
+          if let deleting, model.perform("delete_project", ["id": deleting.id]) { didSelect() }
+          deleting = nil
+        }
+      } message: {
+        Text(
+          "Remove \(deleting?.name ?? "this project") and its pending requests from Vow? Shared quorums, profiles and signed history are kept. No on-chain account is changed."
+        )
       }
     }
   }
@@ -104,6 +142,9 @@ struct WorkspaceNameSheet: View {
   let onCreated: () -> Void
   @Environment(\.dismiss) private var dismiss
   @State private var name = ""
+  @State private var icon: Data?
+  @State private var choosingIcon = false
+  @State private var iconError: String?
   @State private var createNewQuorum = false
   @State private var quorumId = ""
   @State private var quorumName = ""
@@ -111,6 +152,7 @@ struct WorkspaceNameSheet: View {
   @State private var selectedProfiles: [UInt64: String] = [:]
   @State private var threshold = 1
   @State private var chain = "devnet"
+  @FocusState private var nameFocused: Bool
   private var canCreate: Bool {
     guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
     if kind == .organization { return true }
@@ -121,6 +163,68 @@ struct WorkspaceNameSheet: View {
         || selectedMembers.allSatisfy { selectedProfiles[$0] != nil })
   }
   var body: some View {
+    Group {
+      if kind == .organization {
+        organizationForm
+      } else {
+        projectForm
+      }
+    }
+    #if os(macOS)
+      .frame(width: kind == .project ? 560 : 440, height: kind == .project ? 600 : nil)
+    #else
+      .presentationDetents([.large])
+    #endif
+    .fileImporter(isPresented: $choosingIcon, allowedContentTypes: [.png, .jpeg, .heic]) { result in
+      do {
+        icon = try OrganizationArtwork.load(result.get())
+        iconError = nil
+      } catch { iconError = error.localizedDescription }
+    }
+    .onAppear {
+      quorumId = model.state?.quorums.first?.id ?? ""
+      createNewQuorum = model.state?.quorums.isEmpty ?? true
+      nameFocused = kind == .organization
+    }
+  }
+  private var organizationForm: some View {
+    VStack(alignment: .leading, spacing: 24) {
+      Text("New organization").font(.title2.weight(.semibold))
+      HStack(spacing: 16) {
+        Button {
+          choosingIcon = true
+        } label: {
+          OrganizationMark(data: icon, size: 60)
+        }.buttonStyle(.plain).help("Choose organization icon")
+          .accessibilityLabel("Choose organization icon")
+        VStack(alignment: .leading, spacing: 6) {
+          Text("Organization icon").font(.headline)
+          HStack(spacing: 12) {
+            Button(icon == nil ? "Choose image…" : "Change image…") { choosingIcon = true }
+            if icon != nil {
+              Button("Remove") { icon = nil }
+            }
+          }.buttonStyle(.borderless).font(.callout)
+        }
+        Spacer(minLength: 0)
+      }
+      VStack(alignment: .leading, spacing: 8) {
+        Text("Organization name").font(.callout.weight(.medium))
+        TextField("Name", text: $name).textFieldStyle(.roundedBorder).controlSize(.large)
+          .focused($nameFocused).accessibilityIdentifier("workspaceName")
+          .onSubmit { if canCreate { create() } }
+      }
+      if let iconError { ErrorNotice(message: iconError) }
+      if let error = model.error { ErrorNotice(message: error) }
+      HStack(spacing: 12) {
+        Spacer()
+        Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+        Button("Create organization", action: create).buttonStyle(.borderedProminent)
+          .disabled(!canCreate).keyboardShortcut(.defaultAction)
+      }.controlSize(.large)
+    }.padding(28)
+  }
+  private var projectForm: some View {
     NavigationStack {
       Form {
         Section("Name") {
@@ -227,11 +331,6 @@ struct WorkspaceNameSheet: View {
               "Members enroll once with the organization. A quorum selects enrolled members and a threshold. Reuse it for other projects without another ceremony."
             )
           }
-        } else {
-          Section {
-            Text("Enroll members in person once, then compose reusable quorums for your projects.")
-              .foregroundStyle(.secondary)
-          }
         }
         if let error = model.error { Section { ErrorNotice(message: error) } }
       }
@@ -243,15 +342,6 @@ struct WorkspaceNameSheet: View {
           Button("Create", action: create).disabled(!canCreate).keyboardShortcut(.defaultAction)
         }
       }
-    }
-    #if os(macOS)
-      .frame(width: 560, height: kind == .project ? 600 : 300)
-    #else
-      .presentationDetents([.large])
-    #endif
-    .onAppear {
-      quorumId = model.state?.quorums.first?.id ?? ""
-      createNewQuorum = model.state?.quorums.isEmpty ?? true
     }
   }
   private func create() {
@@ -278,6 +368,9 @@ struct WorkspaceNameSheet: View {
       }
     }
     if model.perform(kind.action, fields) {
+      if kind == .organization, let icon, let id = model.state?.organizationId {
+        OrganizationArtwork.save(icon, id: id)
+      }
       onCreated()
       dismiss()
     }

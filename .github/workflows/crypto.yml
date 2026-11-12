@@ -3,9 +3,9 @@ name: Cryptography
 on:
   push:
     branches: [main]
-    paths: ['crates/**', 'Cargo.toml', 'Cargo.lock', '.github/workflows/crypto.yml', 'Justfile', 'apps/apple/Vow/PIVPINPolicy.swift', 'apps/apple/Vow/PIVSetupCoordinator.swift', 'apps/apple/PolicyTests/**', 'scripts/test-piv-pin-policy.sh']
+    paths: ['crates/**', 'vendor/**', 'Cargo.toml', 'Cargo.lock', '.github/workflows/crypto.yml', 'Justfile', 'apps/apple/Vow/PIVPINPolicy.swift', 'apps/apple/Vow/PIVSetupCoordinator.swift', 'apps/apple/PolicyTests/**', 'scripts/test-piv-pin-policy.sh', 'scripts/test-nearby-protocol.sh', 'apps/apple/Vow/NearbyProtocol.swift', 'apps/apple/NearbyProtocolTests/**', 'apps/apple/Vow/VowDocument.swift', 'apps/apple/DocumentPackageTests/**', 'scripts/test-document-package.sh']
   pull_request:
-    paths: ['crates/**', 'Cargo.toml', 'Cargo.lock', '.github/workflows/crypto.yml', 'Justfile', 'apps/apple/Vow/PIVPINPolicy.swift', 'apps/apple/Vow/PIVSetupCoordinator.swift', 'apps/apple/PolicyTests/**', 'scripts/test-piv-pin-policy.sh']
+    paths: ['crates/**', 'vendor/**', 'Cargo.toml', 'Cargo.lock', '.github/workflows/crypto.yml', 'Justfile', 'apps/apple/Vow/PIVPINPolicy.swift', 'apps/apple/Vow/PIVSetupCoordinator.swift', 'apps/apple/PolicyTests/**', 'scripts/test-piv-pin-policy.sh', 'scripts/test-nearby-protocol.sh', 'apps/apple/Vow/NearbyProtocol.swift', 'apps/apple/NearbyProtocolTests/**', 'apps/apple/Vow/VowDocument.swift', 'apps/apple/DocumentPackageTests/**', 'scripts/test-document-package.sh']
   workflow_dispatch:
 
 permissions:
@@ -39,6 +39,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: extractions/setup-just@v3
       - run: just ledger-test
+      - run: just simulation-test
+      - run: rustup target add aarch64-apple-ios
+      - run: just runtime-ios-check
+      - run: just nearby-test
+      - run: just document-test
 
   pin-policy:
     runs-on: macos-latest

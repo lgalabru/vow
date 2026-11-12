@@ -43,6 +43,7 @@
     @State private var exportDocument = VowFile()
     @State private var exporting = false
     let keys: DeviceKey
+    var onReceiveFromMac: () -> Void = {}
     @State private var explanationTarget: ExplanationTarget?
     private var showsConnectionStatus: Bool {
       approvalTarget == nil && explanationTarget == nil && showingReceipt == nil
@@ -103,10 +104,7 @@
           .contentMargins(
             .bottom, showsConnectionStatus && !showsRequestActions ? 60 : 0, for: .scrollContent
           )
-          .navigationTitle(
-            (selection ?? .requests) == .requests
-              ? (model.state?.projectName ?? "Requests") : (selection ?? .requests).title
-          )
+          .navigationTitle("")
           .navigationBarTitleDisplayMode(.inline)
           .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
@@ -408,8 +406,14 @@
               detail: "Import a request file to begin an offline review."
             ) {
               Button("Import Request") { importing = true }.buttonStyle(.borderedProminent)
-              Button("Load Sample Request") { model.perform("sample") }.buttonStyle(.bordered)
-                .disabled(state.quorum == nil)
+              #if DEBUG && targetEnvironment(simulator)
+                // Fixture control is compiled out of physical iPad builds.
+                if ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--ui-test-") })
+                {
+                  Button("Load Sample Request") { model.perform("sample") }.buttonStyle(.bordered)
+                    .disabled(state.quorum == nil)
+                }
+              #endif
             }
             if let error = model.error { ErrorNotice(message: error) }
           }
@@ -478,6 +482,10 @@
         Section("App data") {
           LabeledContent("Signing profiles", value: "\(model.signingProfileChoices.count)")
           LabeledContent("Storage", value: "On this iPad")
+        }
+        Section("Nearby transfer") {
+          Button("Receive from Mac", systemImage: "arrow.down.doc", action: onReceiveFromMac)
+            .accessibilityIdentifier("receiveFromMac")
         }
         Section("Support") {
           Button("Diagnostics", systemImage: "stethoscope") { showingDiagnostics = true }
@@ -551,86 +559,107 @@
       let networkEpoch: UInt64
       let keyEpoch: UInt64
     }
+    @State private var transactionReview: TransactionInspection?
     private var usesNativeKey: Bool { keys.registeredSecurityKey?.usesNative == true }
     private let steps = ["Review", "Authorize", "Export"]
 
     var body: some View {
-      NavigationStack {
-        VStack(spacing: 0) {
-          if step == 1 {
-            authorizationLayout
-          } else {
-            ScrollView {
-              VStack(alignment: .leading, spacing: 24) {
-                if let state = model.state {
-                  Label(
-                    "\(state.organization) · \(state.projectName) · \(state.chain?.name ?? "Unknown network")",
-                    systemImage: "folder"
-                  )
-                  .font(.subheadline).foregroundStyle(.secondary)
-                }
-                if step == 2, let receipt {
-                  Image(systemName: "checkmark.seal.fill").font(.system(size: 48)).foregroundStyle(
-                    Color.accentColor
-                  ).accessibilityHidden(true)
-                  Text("Approval created").font(.largeTitle.bold())
-                  Text("Export the signed approval for collection and verification.")
-                    .foregroundStyle(.secondary)
-                  Surface {
-                    VStack(spacing: 0) {
-                      DetailLine(title: "Organization", value: receipt.organizationName)
-                      DetailLine(title: "Project", value: receipt.projectName)
-                      DetailLine(title: "Request", value: receipt.title)
-                      DetailLine(title: "Quorum", value: receipt.quorumName)
-                      DetailLine(title: "Signature", value: "P-256 · Verified locally")
+      ZStack {
+        if step == 0, let transactionReview {
+          TransactionInspectionView(
+            model: model, inspection: transactionReview, fixedProfile: profile,
+            continueApproval: { step = 1 })
+        } else {
+          NavigationStack {
+            VStack(spacing: 0) {
+              if step == 1 {
+                authorizationLayout
+              } else {
+                ScrollView {
+                  VStack(alignment: .leading, spacing: 24) {
+                    if let state = model.state {
+                      Label(
+                        "\(state.organization) · \(state.projectName) · \(state.chain?.name ?? "Unknown network")",
+                        systemImage: "folder"
+                      )
+                      .font(.subheadline).foregroundStyle(.secondary)
                     }
-                  }
-                  DigestView(digest: receipt.digest)
-                  QuietNotice(
-                    title: "Prototype approval", message: "On-chain execution is unavailable.")
-                } else {
-                  Text("Review request").font(.largeTitle.bold())
-                  Label(
-                    profile.name + " · " + profile.method.title, systemImage: profile.method.symbol
-                  ).font(.subheadline).foregroundStyle(.secondary)
-                  Text("Verify the amount, destination, network and quorum before authorization.")
-                    .foregroundStyle(.secondary)
-                  if let proposal = model.state?.proposal {
-                    Surface {
-                      VStack(spacing: 0) {
-                        DetailLine(title: "Request", value: proposal.title)
-                        DetailLine(
-                          title: "Amount", value: "\(proposal.displayAmount) \(proposal.asset)")
-                        if let quorum = model.state?.quorum {
-                          DetailLine(
-                            title: "Quorum", value: "\(quorum.name) · \(quorum.policyLabel)")
+                    if step == 2, let receipt {
+                      Image(systemName: "checkmark.seal.fill").font(.system(size: 48))
+                        .foregroundStyle(
+                          Color.accentColor
+                        ).accessibilityHidden(true)
+                      Text("Approval created").font(.largeTitle.bold())
+                      Text("Export the signed approval for collection and verification.")
+                        .foregroundStyle(.secondary)
+                      Surface {
+                        VStack(spacing: 0) {
+                          DetailLine(title: "Organization", value: receipt.organizationName)
+                          DetailLine(title: "Project", value: receipt.projectName)
+                          DetailLine(title: "Request", value: receipt.title)
+                          DetailLine(title: "Quorum", value: receipt.quorumName)
+                          DetailLine(title: "Signature", value: "P-256 · Verified locally")
                         }
-                        DetailLine(title: "Recipient", value: proposal.recipientName)
-                        DetailLine(title: "Address", value: proposal.recipient)
-                        DetailLine(
-                          title: "Network", value: model.state?.chain?.name ?? "Unknown network")
                       }
+                      DigestView(digest: receipt.digest)
+                      QuietNotice(
+                        title: "Prototype approval", message: "On-chain execution is unavailable.")
+                    } else {
+                      Text("Review request").font(.largeTitle.bold())
+                      Label(
+                        profile.name + " · " + profile.method.title,
+                        systemImage: profile.method.symbol
+                      ).font(.subheadline).foregroundStyle(.secondary)
+                      Text(
+                        "Verify the amount, destination, network and quorum before authorization."
+                      )
+                      .foregroundStyle(.secondary)
+                      if let proposal = model.state?.proposal {
+                        Surface {
+                          VStack(spacing: 0) {
+                            DetailLine(title: "Request", value: proposal.title)
+                            DetailLine(
+                              title: "Amount", value: "\(proposal.displayAmount) \(proposal.asset)")
+                            if let quorum = model.state?.quorum {
+                              DetailLine(
+                                title: "Quorum", value: "\(quorum.name) · \(quorum.policyLabel)")
+                            }
+                            DetailLine(title: "Recipient", value: proposal.recipientName)
+                            DetailLine(title: "Address", value: proposal.recipient)
+                            DetailLine(
+                              title: "Network", value: model.state?.chain?.name ?? "Unknown network"
+                            )
+                          }
+                        }
+                      }
+                      DigestView(digest: digest)
+                      QuietNotice(
+                        title: "Prototype approval", message: "On-chain execution is unavailable.")
                     }
-                  }
-                  DigestView(digest: digest)
-                  QuietNotice(
-                    title: "Prototype approval", message: "On-chain execution is unavailable.")
+                    if let error { ErrorNotice(message: error) }
+                  }.padding(32).frame(maxWidth: 740).frame(maxWidth: .infinity)
                 }
-                if let error { ErrorNotice(message: error) }
-              }.padding(32).frame(maxWidth: 740).frame(maxWidth: .infinity)
+              }
+              approvalFooter
+            }
+            .background(Color(uiColor: .systemGroupedBackground))
+            .ignoresSafeArea(.container, edges: .bottom)
+            .navigationTitle("").navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+              ToolbarItem(placement: .principal) {
+                FlowBreadcrumb(steps: steps, current: step, compact: true).frame(maxWidth: 520)
+              }
+              ToolbarItem(placement: .cancellationAction) {
+                if step < 2 { Button("Cancel") { cancel() }.disabled(busy) }
+              }
             }
           }
-          approvalFooter
         }
-        .background(Color(uiColor: .systemGroupedBackground))
-        .ignoresSafeArea(.container, edges: .bottom)
-        .navigationTitle("").navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-          ToolbarItem(placement: .principal) {
-            FlowBreadcrumb(steps: steps, current: step, compact: true).frame(maxWidth: 520)
-          }
-          ToolbarItem(placement: .cancellationAction) {
-            if step < 2 { Button("Cancel") { cancel() }.disabled(busy) }
+      }
+      .task(id: digest) {
+        if model.state?.proposal?.transactionIntent != nil {
+          do { transactionReview = try model.call("inspect_current_proposal") } catch {
+            self.error = error.localizedDescription
           }
         }
       }
