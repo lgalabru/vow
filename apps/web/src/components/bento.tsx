@@ -16,19 +16,23 @@ import { SquadsLogo } from './squads';
 import { Bar } from '../stageshow/kit/window';
 import './bento.css';
 
-// The tile list, written before any tile was built (Stageshow, bento.md):
+// The tile list, written before any tile was built (Stageshow, bento.md). It
+// follows the pitch: an iPad as an offline signing station, and what the app
+// adds on top.
 //
-//   Tile     Span   Kind       The one thing                      Moves
-//   Offline  4 x 1  Hero UI    Wi-Fi goes off, approval unlocks   the switch, then the status
-//   Quorum   2 x 1  Stat       2 of 3, on the one dark tile       the arc draws in
-//   Squads   2 x 1  Statement  the Squads mark                    -
-//   Review   4 x 1  Component  one request, decoded               -
-//   File     3 x 1  Object     the approval as a file             rises out of the crop
-//   Team     3 x 1  Component  three members, one still pending   a second tick lands
+//   Tile      Span   Kind        The one thing                        Moves
+//   Offline   4 x 1  Hero UI     Wi-Fi goes off, approval unlocks     the switch, then the status
+//   Station   2 x 1  Statement   nothing else runs here, on the dark  -
+//   Squads    2 x 1  Statement   the Squads mark                      -
+//   Explain   4 x 1  Component   one request, put in plain words      the explanation arrives
+//   File      3 x 1  Object      the request as a file                rises out of the crop
+//   Team      3 x 1  Component   three members, one still pending     a second tick lands
+//   Replay    4 x 1  Component   the accounts, replayed offline       the result ticks
+//   Evidence  2 x 1  Collection  which iPad, which key, which member  -
 //
-// Six columns, so the rows split 4/2, 2/4 and 3/3 and no two rows share a
-// seam. Each picture is its own Stage at 1:1; the ones that move play one
-// beat, once, as the grid scrolls in.
+// Six columns, so the rows split 4/2, 2/4, 3/3 and 4/2 and no row shares a
+// seam with the one above. Each picture is its own Stage at 1:1; the ones
+// that move play one beat, once, as the grid scrolls in.
 
 const STEP = 110;
 const LEAD = 450;
@@ -59,30 +63,6 @@ function usePictureWidth() {
     return () => observer.disconnect();
   }, []);
   return [ref, width] as const;
-}
-
-function useSeen<T extends Element>(delay: number) {
-  const ref = useRef<T>(null);
-  const [seen, setSeen] = useState(false);
-  useEffect(() => {
-    const node = ref.current;
-    if (!node) return;
-    let timer = 0;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting) return;
-        observer.disconnect();
-        timer = window.setTimeout(() => setSeen(true), delay);
-      },
-      { threshold: 0.4 },
-    );
-    observer.observe(node);
-    return () => {
-      observer.disconnect();
-      window.clearTimeout(timer);
-    };
-  }, [delay]);
-  return [ref, seen] as const;
 }
 
 /** True once the grid is wide enough for its three-column layout; stacked tiles hold still. */
@@ -144,7 +124,7 @@ function Offline() {
   return (
     <Tile
       area="offline"
-      lead="Offline means offline."
+      lead="It does not work online."
       picture={
         <div ref={picture} className="vb-picture" aria-hidden>
           {width > 0 && (
@@ -203,26 +183,22 @@ function Offline() {
         </div>
       }
     >
-      Vow pauses approval the moment it detects a network, and shows you why.
+      Vow refuses to approve while any network is reachable. iPads take device management well, so a
+      team can enforce that as policy.
     </Tile>
   );
 }
 
-function Quorum() {
-  const reduced = useReducedMotion();
-  const [ref, seen] = useSeen<HTMLDivElement>(LEAD + STEP);
+function Station() {
   return (
-    <Tile area="quorum" dark>
-      <div ref={ref} className="vb-quorum" data-on={on(seen || !!reduced)}>
-        <span className="vb-ring">
-          <svg viewBox="0 0 120 120" aria-hidden>
-            <circle cx="60" cy="60" r="52" />
-            <circle className="vb-ring-arc" cx="60" cy="60" r="52" pathLength={1} />
-          </svg>
-          <span className="vb-ring-number">2/3</span>
+    <Tile area="station" dark>
+      <div className="vb-claim">
+        <span className="vb-claim-lead">A signing station</span>
+        <span className="vb-claim-text">Nothing else runs here.</span>
+        <span className="vb-claim-note">
+          A sandboxed, signed app on an iPad mini with one job. The attacks that live in browsers
+          and their extensions have nowhere to land.
         </span>
-        <span className="vb-quorum-label">Approvals collected</span>
-        <span className="vb-quorum-note">Each one from its own iPad.</span>
       </div>
     </Tile>
   );
@@ -304,7 +280,8 @@ function File() {
         </div>
       }
     >
-      Requests in, approvals out. Nothing travels over a network.
+      Raw transaction bytes or a <code>.vow</code> file in, an approval out. AirDrop and USB storage
+      today; QR is planned.
     </Tile>
   );
 }
@@ -326,28 +303,79 @@ function Squads() {
   );
 }
 
-function Review() {
+function Explain() {
   const [picture, width] = usePictureWidth();
   return (
     <Tile
-      area="review"
+      area="explain"
       drift={72}
-      lead="Read what you approve."
+      lead="Explained on the device."
       picture={
         <div ref={picture} className="vb-picture" aria-hidden>
           {width > 0 && (
-            <Stage width={width} height={236} className="vb-stage">
-              {() => (
+            <Stage<Beat>
+              width={width}
+              height={262}
+              initial={before}
+              poster={after}
+              play="once"
+              script={scripts[3]}
+              className="vb-stage"
+            >
+              {(scene) => (
                 <div className="vb-panel vb-request">
                   <div className="vb-request-head">
                     <span className="vb-name">Contributor grants</span>
                     <span className="vb-amount">12,500.00 USDC</span>
                   </div>
-                  <Row title={<span className="vb-name vb-name--quiet">From</span>} pad={14}>
-                    <span className="vb-name">Treasury</span>
+                  <Row title={<span className="vb-name vb-name--quiet">Treasury</span>} pad={14}>
+                    <span className="vb-name">to Grants</span>
                   </Row>
-                  <Row title={<span className="vb-name vb-name--quiet">To</span>} pad={14}>
-                    <span className="vb-name">Grants</span>
+                  <div className="vb-explain" data-on={on(scene.on)}>
+                    <span>On-device explanation</span>
+                    <p>
+                      Sends 12,500 USDC from the team&rsquo;s Treasury vault to its Grants vault.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </Stage>
+          )}
+        </div>
+      }
+    >
+      The app decodes the transaction, and Apple&rsquo;s on-device model puts it in plain words.
+      There is no cloud fallback.
+    </Tile>
+  );
+}
+
+function Replay() {
+  const [picture, width] = usePictureWidth();
+  return (
+    <Tile
+      area="replay"
+      drift={40}
+      lead="Replayed before you sign."
+      picture={
+        <div ref={picture} className="vb-picture" aria-hidden>
+          {width > 0 && (
+            <Stage<Beat>
+              width={width}
+              height={206}
+              initial={before}
+              poster={after}
+              play="once"
+              script={scripts[4]}
+              className="vb-stage"
+            >
+              {(scene) => (
+                <div className="vb-panel">
+                  <Row title={<span className="vb-name">Accounts in the file</span>} pad={14}>
+                    <span className="vb-name vb-name--quiet">3</span>
+                  </Row>
+                  <Row title={<span className="vb-name">Replayed on this iPad</span>} pad={14}>
+                    <Check on={scene.on} pending size={22} />
                   </Row>
                 </div>
               )}
@@ -356,23 +384,50 @@ function Review() {
         </div>
       }
     >
-      Requests arrive as files. The iPad shows who pays whom, and how much, before it asks you for
-      anything.
+      A <code>.vow</code> file carries the accounts the transaction touches, so the iPad can run it
+      offline and show what would change.
     </Tile>
   );
 }
 
-/** The features grid: six tiles of three sizes. */
+const EVIDENCE = ['This iPad', 'This security key', 'This member'];
+
+function Evidence() {
+  return (
+    <Tile
+      area="evidence"
+      drift={72}
+      lead="Evidence with every approval."
+      picture={
+        <span className="vb-chips">
+          {EVIDENCE.map((label) => (
+            <span key={label}>
+              <Icon name="check" size={14} />
+              {label}
+            </span>
+          ))}
+        </span>
+      }
+    >
+      Each approval records what made it. The design attaches that to the signature, to be checked
+      on-chain.
+    </Tile>
+  );
+}
+
+/** The features grid: eight tiles of three sizes. */
 export function Bento() {
   return (
     <div className="vb">
       <div className="vb-grid">
         <Offline />
-        <Quorum />
+        <Station />
         <Squads />
-        <Review />
+        <Explain />
         <File />
         <Team />
+        <Replay />
+        <Evidence />
       </div>
     </div>
   );

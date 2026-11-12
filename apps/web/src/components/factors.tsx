@@ -328,13 +328,13 @@ export function FactorsSite({ stars }: { stars?: number | null }) {
         <section className="section shell" id="features" aria-labelledby="features-heading">
           <Reveal className="heading">
             <h2 id="features-heading">
-              Built for one decision
+              An offline
               <br />
-              at a time.
+              signing station.
             </h2>
             <p>
-              A browser is a busy place. Vow gives the request, your consent and your keys a device
-              of their own.
+              Vow turns an iPad mini into the one place your team approves from. Doing it through an
+              app is what makes the rest possible.
             </p>
           </Reveal>
           <Bento />

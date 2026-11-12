@@ -8,7 +8,8 @@ test('landing page presents the product without signing anything', async ({ page
   await page.locator('#ipad').scrollIntoViewIfNeeded();
   await expect(page.getByRole('heading', { name: 'Sign it yourself.' })).toBeVisible();
   await page.locator('#features').scrollIntoViewIfNeeded();
-  await expect(page.getByText('Offline means offline.')).toBeVisible();
+  await expect(page.getByText('It does not work online.')).toBeVisible();
+  await expect(page.getByText('Nothing else runs here.')).toBeVisible();
   await expect(page.getByRole('img', { name: 'Squads' })).toBeVisible();
   await page.locator('#mac').scrollIntoViewIfNeeded();
   await expect(
@@ -36,6 +37,8 @@ test('availability and limitations are discoverable', async ({ page }) => {
   await page.goto('/');
   await page.getByText('Can I use Vow with a live treasury?', { exact: true }).click();
   await expect(page.getByText(/There is no public App Store or TestFlight release/)).toBeVisible();
+  await page.getByText('How is offline enforced?', { exact: true }).click();
+  await expect(page.getByText(/locks approval while any network path is available/)).toBeVisible();
   await expect(page.getByRole('link', { name: /In development/ })).toHaveAttribute(
     'href',
     'https://github.com/lgalabru/vow',

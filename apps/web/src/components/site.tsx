@@ -9,12 +9,32 @@ const questions = [
   {
     question: 'What is Vow?',
     answer:
-      'Vow is a prototype for teams that share control of a Solana multisig. The Mac companion coordinates enrollment and prepares requests. A separate iPad reviews requests, collects consent, and exports locally verified approvals.',
+      'Vow turns an iPad mini into an offline signing station for a team that shares control of a Solana multisig. A Mac companion runs the setup ceremony and prepares requests. Each member reviews a request on their own iPad, confirms it with three factors, and exports an approval.',
   },
   {
-    question: 'Why a dedicated iPad?',
+    question: 'Why an app on an iPad instead of a browser wallet?',
     answer:
-      'A separate device gives each member a focused place to inspect and approve a request. The iPad app locks approval when a network connection is present. Requests and approvals move as files, so the device can stay offline during signing.',
+      'Most attacks on signers arrive through the browser: a compromised site, a malicious extension, a swapped address. On the iPad, Vow is a sandboxed, signed app on a device that does nothing else, so that route is closed by design. It is not immune to everything. Every imported file is still treated as hostile, and unknown instructions block signing.',
+  },
+  {
+    question: 'How is offline enforced?',
+    answer:
+      'By the app first: it locks approval while any network path is available and unlocks by itself when there is none. A team can add device management on top, since iPads are built for it, and make the restriction a policy. That is optional, and it makes whoever administers the devices a party you trust.',
+  },
+  {
+    question: 'How does a transaction reach an offline iPad?',
+    answer:
+      'As a file. The iPad accepts raw transaction bytes, or a .vow file that also carries review context and the accounts the transaction touches. Today files move by AirDrop, USB storage or the Files app, and the approval leaves the same way. AirDrop needs the radios on, so it is not an air gap. QR codes are planned for teams that want no connection of any kind.',
+  },
+  {
+    question: 'How do I know what I am signing?',
+    answer:
+      'The app decodes each instruction and its accounts, and refuses to sign what it cannot decode. With a .vow file it replays the transaction on the iPad, offline, against the accounts in the file. Apple’s on-device model can then explain the decoded facts in plain language, with no cloud fallback; if the model is unavailable, the facts are still there. Today the replay runs on synthetic state, not authenticated chain state.',
+  },
+  {
+    question: 'What does an approval prove?',
+    answer:
+      'That it was made on this iPad, with this security key, by this member. The app records that evidence with each approval. The design is to attach it to the signature so a program can check it on-chain; that enforcement, and the Squads adapter it needs, are not finished.',
   },
   {
     question: 'What does the security key do?',
@@ -29,7 +49,7 @@ const questions = [
   {
     question: 'Can I use Vow with a live treasury?',
     answer:
-      'Not yet. The native apps are prototypes. Production ceremony verification, recovery, attestations, and the on-chain multisig adapter remain in development. There is no public App Store or TestFlight release, and prototype approvals cannot execute a real transfer.',
+      'Not yet. Vow is experimental and unaudited. The apps produce prototype approval evidence, not executable Squads votes. Production enforcement, authenticated chain state, recovery and an independent security review remain unfinished. There is no public App Store or TestFlight release.',
   },
   {
     question: 'Does the website connect to my wallet?',
