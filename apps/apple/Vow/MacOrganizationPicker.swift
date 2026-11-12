@@ -13,6 +13,7 @@
     func makeCoordinator() -> Coordinator { Coordinator() }
     func makeNSView(context: Context) -> SidebarOrganizationButton {
       let button = SidebarOrganizationButton(frame: .zero, pullsDown: false)
+      button.cell = SidebarOrganizationCell(textCell: "", pullsDown: false)
       button.isBordered = false
       button.bezelStyle = .accessoryBarAction
       button.alignment = .left
@@ -73,6 +74,14 @@
         }
         onCreate?()
       }
+    }
+  }
+  final class SidebarOrganizationCell: NSPopUpButtonCell {
+    override func drawInterior(withFrame cellFrame: NSRect, in controlView: NSView) {
+      let inset = NSRect(
+        x: cellFrame.minX + 12, y: cellFrame.minY,
+        width: max(0, cellFrame.width - 12), height: cellFrame.height)
+      super.drawInterior(withFrame: inset, in: controlView)
     }
   }
   final class SidebarOrganizationButton: NSPopUpButton {
