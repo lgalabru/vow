@@ -2,6 +2,8 @@
   <img alt="Vow" src="apps/web/public/vow-glyph.png" width="200">
 </div>
 
+<br>
+
 <p align="center">
   <img alt="Status: experimental" src="https://img.shields.io/badge/status-experimental-orange">
   <img alt="Core: Rust" src="https://img.shields.io/badge/core-Rust-black">
