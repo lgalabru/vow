@@ -30,7 +30,7 @@
       guard let text = NSPasteboard.general.string(forType: .string),
         !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
       else {
-        error = "Copy a serialized transaction as base64, hex or JSON first."
+        error = "Copy a serialized transaction or unsigned message as base64, hex or JSON first."
         return
       }
       guard text.utf8.count <= 64 * 1024 else {
@@ -190,9 +190,11 @@
               }.controlSize(.regular)
             }
           } else if !clipboard.busy {
-            Text("Copy a Solana transaction to prepare a review file for your iPad.")
-              .font(.callout).foregroundStyle(.secondary).fixedSize(
-                horizontal: false, vertical: true)
+            Text(
+              "Copy a Solana transaction or unsigned message to prepare a review file for your iPad."
+            )
+            .font(.callout).foregroundStyle(.secondary).fixedSize(
+              horizontal: false, vertical: true)
           }
           Divider()
           DisclosureGroup(isExpanded: $showingDevices) {

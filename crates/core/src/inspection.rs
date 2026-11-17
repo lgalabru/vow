@@ -8,6 +8,8 @@ use solana_pubkey::Pubkey;
 use solana_transaction::versioned::VersionedTransaction;
 use std::str::FromStr;
 
+// Solana transactions, including their signature section, fit one network packet.
+const MAX_TRANSACTION_BYTES: usize = 1232;
 const CHANNEL: &str = "CHNLxYvVA28MJP9PrFuDXccuoGXAx7jBacfLEkahyGsX";
 const TOKEN: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 const ATA: &str = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
@@ -59,12 +61,12 @@ impl BlockhashContext {
     }
 }
 pub fn transaction(bytes: &[u8]) -> Result<VersionedTransaction, String> {
-    if bytes.is_empty() || bytes.len() > 1232 {
+    if bytes.is_empty() || bytes.len() > MAX_TRANSACTION_BYTES {
         return Err("Choose a serialized Solana transaction up to 1232 bytes.".into());
     }
     let tx: VersionedTransaction = bincode::DefaultOptions::new()
         .with_fixint_encoding()
-        .with_limit(1232)
+        .with_limit(MAX_TRANSACTION_BYTES as u64)
         .reject_trailing_bytes()
         .deserialize(bytes)
         .map_err(|_| "Malformed Solana transaction dump.")?;
@@ -75,8 +77,48 @@ pub fn transaction(bytes: &[u8]) -> Result<VersionedTransaction, String> {
     }
     Ok(tx)
 }
+// Bare messages omit the short-vector signature section. Add only empty slots;
+// the message bytes remain the exact bytes the signer will eventually authorize.
+fn review_wire(bytes: Vec<u8>, transaction_declared: bool) -> Result<Vec<u8>, String> {
+    let transaction_error = match transaction(&bytes) {
+        Ok(_) => return Ok(bytes),
+        Err(error) => error,
+    };
+    if transaction_declared || bytes.is_empty() || bytes.len() > MAX_TRANSACTION_BYTES {
+        return Err(transaction_error);
+    }
+    let mut tx = VersionedTransaction {
+        signatures: Vec::new(),
+        message: bincode::DefaultOptions::new()
+            .with_fixint_encoding()
+            .with_limit(MAX_TRANSACTION_BYTES as u64)
+            .reject_trailing_bytes()
+            .deserialize(&bytes)
+            .map_err(|_| "Paste a complete serialized Solana transaction or unsigned message.")?,
+    };
+    tx.message
+        .sanitize()
+        .map_err(|_| "Invalid message account or instruction indices.")?;
+    if bincode::serialize(&tx.message).map_err(|_| "Cannot encode message.")? != bytes {
+        return Err("Noncanonical Solana message encoding.".into());
+    }
+    tx.signatures.resize(
+        usize::from(tx.message.header().num_required_signatures),
+        Default::default(),
+    );
+    let wire = bincode::serialize(&tx).map_err(|_| "Cannot encode unsigned transaction.")?;
+    transaction(&wire)?;
+    debug_assert_eq!(tx.message.serialize(), bytes);
+    debug_assert!(
+        tx.signatures
+            .iter()
+            .all(|signature| signature.as_ref().iter().all(|byte| *byte == 0))
+    );
+    Ok(wire)
+}
 // Accept raw binary via hex at FFI, a base64/hex text dump, RPC [base64,"base64"],
-// or a small JSON envelope. No missing network is inferred from transaction bytes.
+// a bare legacy/v0 message, or a small JSON envelope. Explicit transaction
+// envelopes remain strict. No missing network is inferred from wire bytes.
 pub fn inspect(request: &Value, chain: Chain) -> Result<Value, String> {
     let raw = text(request, "data")?;
     if raw.len() > 8 * 1024 * 1024 {
@@ -129,6 +171,7 @@ pub fn inspect(request: &Value, chain: Chain) -> Result<Value, String> {
             .or_else(|_| base64::prelude::BASE64_STANDARD.decode(raw))
             .map_err(|_| "Choose binary, base64, hex, or a transaction JSON dump.")?
     };
+    let bytes = review_wire(bytes, hex.is_some() || b64.is_some() || tuple.is_some())?;
     let tx = transaction(&bytes)?;
     let validity: Option<BlockhashContext> = value
         .get("blockhash_context")
@@ -356,6 +399,76 @@ pub fn channel_fixture(chain: Chain, hash: Option<&str>, open_slot: u64) -> Resu
 #[cfg(test)]
 mod tests {
     use super::*;
+    const SQUADS_MESSAGE: &str = "AQACBBBrTyU5asVf4l//YsNtPxAJMABL9f05JdFExaNKZiIUi+Hqj4jRPBdgjD3FhdC3qMjiPwcMcp7ELYM0ahnURQf1K8iPz5bul+MJr7RdiQFRHRQEUHL248GW10srwBrezgaBxM5H4iNouLFVXsiHrwku/H77tmyj9S+/aNSsnLeoYcXmr9MVbB3SA+MoROabY6I+AyacXpMazoTiWQGtGWMBAwMCAAEJkCWkiLzYKvgA";
+    #[test]
+    fn bare_squads_message_adds_only_empty_signature_slots() {
+        let message = base64::prelude::BASE64_STANDARD
+            .decode(SQUADS_MESSAGE)
+            .unwrap();
+        assert_eq!(message.len(), 180);
+        assert!(transaction(&message).is_err());
+        for raw in [
+            SQUADS_MESSAGE.to_string(),
+            hex::encode(&message),
+            json!(SQUADS_MESSAGE).to_string(),
+        ] {
+            let inspected = inspect(&json!({"data":raw}), Chain::Devnet).unwrap();
+            let wire = hex::decode(inspected["transaction_hex"].as_str().unwrap()).unwrap();
+            assert_eq!(wire.len(), message.len() + 65);
+            assert_eq!(&wire[..65], &[vec![1], vec![0; 64]].concat());
+            assert_eq!(&wire[65..], message);
+            assert_eq!(inspected["signed"], false);
+            assert_eq!(inspected["signature_count"], 1);
+            assert_eq!(
+                inspected["instructions"][0]["program"],
+                "SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf"
+            );
+            assert_eq!(inspected["execution_ready"], false);
+            let reimported = inspect(&json!({"data":inspected["package"]}), Chain::Devnet).unwrap();
+            assert_eq!(reimported["id"], inspected["id"]);
+            assert_eq!(reimported["transaction_hex"], inspected["transaction_hex"]);
+        }
+    }
+    #[test]
+    fn unsigned_messages_are_canonical_bounded_and_never_replace_declared_transactions() {
+        let message = base64::prelude::BASE64_STANDARD
+            .decode(SQUADS_MESSAGE)
+            .unwrap();
+        for value in [
+            json!({"transaction_base64":SQUADS_MESSAGE}),
+            json!([SQUADS_MESSAGE, "base64"]),
+            json!({"transaction_hex":hex::encode(&message)}),
+        ] {
+            assert!(inspect(&json!({"data":value.to_string()}), Chain::Devnet).is_err());
+        }
+        for bytes in [message[..179].to_vec(), [message.clone(), vec![0]].concat()] {
+            assert!(review_wire(bytes, false).is_err());
+        }
+        for (position, value) in [(0, 5), (2, 5), (165, 4)] {
+            let mut invalid = message.clone();
+            invalid[position] = value;
+            assert!(review_wire(invalid, false).is_err());
+        }
+        let mut signed = crate::transaction::fixture_transaction();
+        signed[1..65].fill(7);
+        assert_eq!(review_wire(signed.clone(), false).unwrap(), signed);
+        let mut too_large = message[..170].to_vec();
+        too_large.extend_from_slice(&[0xa4, 0x08]); // 1,060 instruction bytes.
+        too_large.resize(1232, 0);
+        assert!(review_wire(too_large, false).is_err()); // Signature slots must also fit.
+        let mut two_signers = message.clone();
+        two_signers[0] = 2;
+        let wire = review_wire(two_signers.clone(), false).unwrap();
+        assert_eq!(wire[0], 2);
+        assert_eq!(&wire[1..129], &[0; 128]);
+        assert_eq!(&wire[129..], two_signers);
+        let mut version_zero = vec![0x80];
+        version_zero.extend_from_slice(&message);
+        version_zero.push(0); // No address lookup tables.
+        let wire = review_wire(version_zero.clone(), false).unwrap();
+        assert_eq!(&wire[65..], version_zero);
+        assert_eq!(review_wire(wire.clone(), false).unwrap(), wire);
+    }
     #[test]
     fn blockhash_context_binds_hash_chain_and_deadline() {
         let fixture = channel_fixture(Chain::Devnet, None, 1).unwrap();

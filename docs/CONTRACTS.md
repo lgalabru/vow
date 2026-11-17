@@ -213,8 +213,14 @@ encoded account data, 2 MB profile. There is no RPC fallback in `vow-replay`.
 `inspect_transaction_dump` accepts serialized full transactions, including unsigned
 signature placeholders. Native import converts binary to hex. Text may be hex,
 base64, RPC `[base64,"base64"]`, JSON `transaction_hex` / `transaction_base64`, or
-`transaction: [base64,"base64"]`. Instruction-only dumps and bare messages are
-unsupported. The inspector never signs. Unresolved lookup addresses and unknown
+`transaction: [base64,"base64"]`. Bare canonical legacy and v0 messages are also
+accepted as raw binary, hex, base64 or a JSON string. The inspector wraps them in
+an unsigned transaction with exactly the required number of zero-filled signature
+slots, preserving every message byte. The complete result, including those slots,
+must fit the 1,232-byte wire limit. Existing transactions retain all original
+signature bytes. Explicit transaction fields and RPC tuples require complete
+transactions; a malformed declared transaction is never reinterpreted as a message.
+Instruction-only dumps remain unsupported. The inspector never signs. Unresolved lookup addresses and unknown
 instructions remain explicit. A network absent from raw bytes is not inferred.
 
 `vow.prototype.inspection.v1` wraps the same bytes with optional companion context;
@@ -462,7 +468,7 @@ creating a replacement. User confirmation precedes this operation.
 `vow_profile_transaction_v1` also accepts:
 
 ```json
-{"mode":"clipboard","chain":"solana:devnet","data":"<serialized transaction as hex, base64 or JSON>"}
+{"mode":"clipboard","chain":"solana:devnet","data":"<serialized transaction or unsigned message as hex, base64 or JSON>"}
 ```
 
 The native request limit is 68 KB; clipboard text is limited to 64 KB. The

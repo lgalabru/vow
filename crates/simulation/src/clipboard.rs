@@ -209,6 +209,27 @@ mod tests {
         let original = wire.clone();
         let request = json!({"chain":"solana:devnet","data":hex::encode(wire)});
         let result = profile_at(&request, source.rpc_url(), &genesis).unwrap();
+        // A wallet's serialized message must prepare the same message bytes, with
+        // the source RPC remaining read-only throughout both capture paths.
+        let message = inspection::transaction(&original)
+            .unwrap()
+            .message
+            .serialize();
+        let message_result = profile_at(
+            &json!({"chain":"solana:devnet","data":hex::encode(message)}),
+            source.rpc_url(),
+            &genesis,
+        )
+        .unwrap();
+        assert!(message_result["simulation"]["result"]["err"].is_null());
+        let (_, message_inspected) =
+            inspect_request(&json!({"chain":"solana:devnet","data":message_result["package"]}))
+                .unwrap();
+        let unsigned_wire =
+            hex::decode(message_inspected["transaction_hex"].as_str().unwrap()).unwrap();
+        assert_eq!(unsigned_wire[0], 1);
+        assert_eq!(&unsigned_wire[1..65], &[0; 64]);
+        assert_eq!(&unsigned_wire[65..], &original[65..]);
         assert_eq!(rpc.get_balance(&payer).unwrap(), before);
         assert_eq!(result["instruction_count"], 2);
         assert!(result["simulation"]["result"]["err"].is_null());
