@@ -12,6 +12,7 @@
     private(set) var instructionCount = 0
     private(set) var computeUnits: UInt64 = 0
     private(set) var simulationFailed = false
+    private(set) var simulationFailureSummary: String?
     private(set) var networkWasAssumed = true
     private(set) var automaticDeliveryPending = false
     private var task: Task<Void, Never>?
@@ -23,6 +24,7 @@
       busy = false
       file = nil
       error = nil
+      simulationFailureSummary = nil
       automaticDeliveryPending = false
     }
     func prepare(using nearby: NearbyTransferService) {
@@ -70,11 +72,12 @@
           let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
             "Vow-\(UUID().uuidString)")
           try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-          let url = directory.appendingPathComponent("Clipboard-review.vow")
+          let url = directory.appendingPathComponent("Transaction.vow")
           try VowDocument.write(Data(package.utf8), to: url)
           instructionCount = result["instruction_count"] as? Int ?? 0
           computeUnits = output["unitsConsumed"] as? UInt64 ?? 0
           simulationFailed = !(output["err"] is NSNull)
+          simulationFailureSummary = result["failure_summary"] as? String
           networkWasAssumed = result["network_explicit"] as? Bool != true
           file = url
           automaticDeliveryPending = true
@@ -88,6 +91,12 @@
       guard automaticDeliveryPending, nearby.ready, let file else { return }
       automaticDeliveryPending = false
       nearby.sendFile(file)
+    }
+    func inspectFile() {
+      guard let file else { return }
+      if !NSWorkspace.shared.open(file) {
+        error = "Vow could not open this review file. Save it and open it from Finder."
+      }
     }
     func save() {
       guard let file else { return }
@@ -164,14 +173,25 @@
               HStack(spacing: 10) {
                 Image(systemName: "doc").font(.title2).foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: 3) {
-                  Text("Transaction.vow").font(.callout.weight(.medium))
-                  Text(
-                    clipboard.simulationFailed
-                      ? "Simulation failed"
-                      : "\(clipboard.instructionCount) instructions · \(clipboard.computeUnits.formatted()) CU"
-                  )
-                  .font(.caption).foregroundStyle(
-                    clipboard.simulationFailed ? Color.red : Color.secondary)
+                  Text(file.lastPathComponent).font(.callout.weight(.medium))
+                  if clipboard.simulationFailed {
+                    Button {
+                      openWorkspace()
+                      clipboard.inspectFile()
+                    } label: {
+                      HStack(alignment: .firstTextBaseline, spacing: 5) {
+                        Text(clipboard.simulationFailureSummary ?? "Simulation failed")
+                          .lineLimit(2).multilineTextAlignment(.leading)
+                        Image(systemName: "info.circle")
+                      }.font(.caption).foregroundStyle(.red)
+                    }.buttonStyle(.plain).help("Inspect the failed transaction and simulation logs")
+                      .accessibilityIdentifier("inspectClipboardFailure")
+                  } else {
+                    Text(
+                      "\(clipboard.instructionCount) instructions · \(clipboard.computeUnits.formatted()) CU"
+                    )
+                    .font(.caption).foregroundStyle(.secondary)
+                  }
                 }
                 Spacer()
                 Button {

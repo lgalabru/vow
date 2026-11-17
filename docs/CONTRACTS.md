@@ -471,6 +471,12 @@ creating a replacement. User confirmation precedes this operation.
 {"mode":"clipboard","chain":"solana:devnet","data":"<serialized transaction or unsigned message as hex, base64 or JSON>"}
 ```
 
+The connected result also exposes an optional `failure_summary` for display. It
+combines the structured RPC error with a matching program-reported Anchor error
+message, with bounded log scanning and output length. This is untrusted diagnostic
+text, never an input to signing policy. The original error and logs remain in the
+review package.
+
 The native request limit is 68 KB; clipboard text is limited to 64 KB. The
 selected chain must be `solana:devnet` or `solana:mainnet`; RPC endpoints come
 from the fixed chain configuration. Explicit conflicting chain/genesis metadata

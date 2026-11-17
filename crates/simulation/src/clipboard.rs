@@ -14,6 +14,67 @@ pub fn inspect_request(request: &Value) -> Result<(Chain, Value), String> {
     Ok((chain, inspected))
 }
 
+// Display-only diagnostics from RPC errors and program-supplied logs. These
+// labels never participate in transaction validation or authorization.
+#[cfg(any(target_os = "macos", test))]
+fn failure_summary(result: &Value) -> Option<String> {
+    const SUMMARY_CHARACTERS_MAX: usize = 240;
+    const LOG_LINES_MAX: usize = 128;
+    const LOG_BYTES_MAX: usize = 2048;
+    let error = result.get("err").filter(|error| !error.is_null())?;
+    let error_text = error
+        .as_str()
+        .map_or_else(|| error.to_string(), str::to_owned);
+    let abbreviated = |text: &str| {
+        text.chars()
+            .take(SUMMARY_CHARACTERS_MAX)
+            .collect::<String>()
+    };
+    let Some(instruction) = error["InstructionError"]
+        .as_array()
+        .filter(|pair| pair.len() == 2)
+    else {
+        return Some(abbreviated(&error_text));
+    };
+    let Some(index) = instruction[0]
+        .as_u64()
+        .and_then(|index| index.checked_add(1))
+    else {
+        return Some(abbreviated(&error_text));
+    };
+    let Some(code) = instruction[1]["Custom"]
+        .as_u64()
+        .and_then(|code| u32::try_from(code).ok())
+    else {
+        return Some(abbreviated(&format!(
+            "Instruction {index}: {}",
+            instruction[1]
+        )));
+    };
+    let marker = format!("Error Number: {code}. Error Message: ");
+    if let Some(logs) = result["logs"].as_array() {
+        for line in logs
+            .iter()
+            .take(LOG_LINES_MAX)
+            .rev()
+            .filter_map(Value::as_str)
+        {
+            if line.len() > LOG_BYTES_MAX || !line.starts_with("Program log: AnchorError") {
+                continue;
+            }
+            if let Some((_, message)) = line.split_once(&marker) {
+                let message = message.trim().trim_end_matches('.');
+                if !message.is_empty() {
+                    return Some(abbreviated(&format!(
+                        "Instruction {index}: {message} ({code})"
+                    )));
+                }
+            }
+        }
+    }
+    Some(format!("Instruction {index}: program error {code}"))
+}
+
 #[cfg(target_os = "macos")]
 pub fn profile(request: &Value) -> Result<Value, String> {
     let (chain, _) = inspect_request(request)?;
@@ -119,13 +180,42 @@ fn profile_at(request: &Value, endpoint: &str, expected_genesis: &str) -> Result
         Ok(json!({"filename":format!("Vow-{}.vow",&inspected["id"].as_str().ok_or("Missing digest.")?[..12]),
             "package":text,"wire_digest":inspected["id"],"network_explicit":inspected["network_explicit"],
             "chain":chain.snapshot(),"instruction_count":inspected["instructions"].as_array().map(Vec::len),
-            "simulation":evidence,"execution_ready":false}))
+            "simulation":evidence,"failure_summary":failure_summary(result),"execution_ready":false}))
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn simulation_failure_diagnostics_keep_structured_errors_and_logs_distinct() {
+        let result = json!({"err":{"InstructionError":[0,{"Custom":6008}]},"logs":["Program log: AnchorError thrown in proposal_vote.rs. Error Code: InvalidProposalStatus. Error Number: 6008. Error Message: Invalid proposal status."]});
+        assert_eq!(
+            failure_summary(&result).as_deref(),
+            Some("Instruction 1: Invalid proposal status (6008)")
+        );
+        assert!(failure_summary(&json!({"err":null})).is_none());
+        assert!(failure_summary(&json!({})).is_none());
+        assert_eq!(
+            failure_summary(&json!({"err":"AccountNotFound"})).as_deref(),
+            Some("AccountNotFound")
+        );
+        let mut mismatch = result.clone();
+        mismatch["err"]["InstructionError"][1]["Custom"] = json!(42);
+        assert_eq!(
+            failure_summary(&mismatch).as_deref(),
+            Some("Instruction 1: program error 42")
+        );
+        let mut oversized = result;
+        oversized["logs"][0] = json!(format!(
+            "Program log: AnchorError Error Number: 6008. Error Message: {}",
+            "x".repeat(4096)
+        ));
+        assert_eq!(
+            failure_summary(&oversized).as_deref(),
+            Some("Instruction 1: program error 6008")
+        );
+    }
     #[cfg(target_os = "macos")]
     #[test]
     fn rpc_envelopes_are_accepted_but_batches_are_never_silently_truncated() {
