@@ -1,8 +1,19 @@
 # Vow implementation plan
 
-Updated: 2026-11-11. Status: native prototypes and a working compatibility spike.
+Updated: 2026-11-18. Status: native prototypes and a working compatibility spike.
 Use case and architecture: [docs/DESIGN.md](docs/DESIGN.md).
 Security gates: [docs/SECURITY.md](docs/SECURITY.md).
+
+## Watched multisigs
+
+- [x] Local Mac watchlist with names, explicit Devnet/Mainnet selection and Explorer-link resolution.
+- [x] Bounded Rust Squads v4 account/PDA validation, member permissions, status/votes, configuration actions and vault instructions.
+- [x] Native proposal browser with pending/history filters, stale detection, paging and foreground refresh.
+- [x] Prepare canonical unsigned approval votes for an existing voting member, with fresh blockhash observations and stored-action fixtures.
+- [x] Canonicalize RPC metadata and validate the complete package before returning it to the app; regression-test strict fixture import.
+- [x] Prepare & AirDrop menu and explicit AirDrop action in transaction review.
+- [ ] Resolve vault address lookup tables during observation/preparation; unresolved tables currently block preparation.
+- [ ] On-chain signing adapter: existing Ledger/Vow receipt signatures do not count as native Squads votes. Watching and preparation do not bypass that boundary.
 
 ## Transaction review and navigation pass
 

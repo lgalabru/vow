@@ -38,6 +38,26 @@ final class VowUITests: XCTestCase {
     add(attachment)
   }
   #if os(macOS)
+    func testObservedMultisigShowsStoredActionsAndMemberPermissions() throws {
+      let app = XCUIApplication()
+      app.launchArguments = ["--ui-test-observed-multisig", "-ApplePersistenceIgnoreState", "YES", "-NSQuitAlwaysKeepsWindows", "NO"]
+      launch(app)
+      if !app.windows.firstMatch.waitForExistence(timeout: 3) { app.typeKey("n", modifierFlags: .command) }
+      XCTAssertTrue(app.descendants(matching: .any)["watchedMultisigPicker"].waitForExistence(timeout: 10))
+      XCTAssertTrue(app.staticTexts["Add member"].firstMatch.waitForExistence(timeout: 5))
+      capture(app, "Mac — Watched multisig proposals")
+      app.buttons["Review proposal 5"].click()
+      XCTAssertTrue(app.staticTexts["Initiate, Vote, Execute"].waitForExistence(timeout: 5))
+      XCTAssertTrue(app.staticTexts["Proposal #5"].exists)
+      XCTAssertFalse(app.descendants(matching: .any)["prepareMultisigApproval"].isEnabled)
+      capture(app, "Mac — Multisig configuration proposal")
+      app.activate()
+      app.buttons["Close"].click()
+      XCTAssertTrue(app.staticTexts["Proposal #5"].waitForNonExistence(timeout: 5))
+      app.buttons["Add Multisig"].firstMatch.click()
+      XCTAssertTrue(app.textFields["multisigWatchAddress"].waitForExistence(timeout: 5))
+      capture(app, "Mac — Watch a multisig")
+    }
     func testOrganizationSwitcherAndCreationLayout() throws {
       let app = XCUIApplication()
       app.launchArguments = ["--ui-test-session", "-ApplePersistenceIgnoreState", "YES", "-NSQuitAlwaysKeepsWindows", "NO"]

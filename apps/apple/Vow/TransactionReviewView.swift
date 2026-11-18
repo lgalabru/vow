@@ -23,6 +23,7 @@ struct TransactionInspectionView: View {
   @State private var changesOnly = true
   @State private var showingContext = false
   @State private var showingSimulationError = false
+  @State private var sharingError: String?
   @State private var exportURL: URL?
   @State private var explanation: String?
   @State private var explanationStatus: String?
@@ -119,29 +120,45 @@ struct TransactionInspectionView: View {
     .onChange(of: model.state?.organizationId) { _, _ in dismiss() }
   }
   private var reviewToolbar: some View {
-    HStack(spacing: 12) {
-      Button {
-        dismiss()
-      } label: {
-        Image(systemName: "xmark").font(.system(size: 12, weight: .semibold))
-          .frame(width: 30, height: 30).background(.secondary.opacity(0.09), in: Circle())
-      }.buttonStyle(.plain).accessibilityLabel("Close").keyboardShortcut(.cancelAction)
-      Spacer(minLength: 4)
-      FlowBreadcrumb(steps: ["Review", "Authorize", "Export"], current: step, compact: true).frame(
-        maxWidth: 440)
-      Spacer(minLength: 4)
-      if let exportURL {
-        ShareLink(
-          item: VowTransfer(url: exportURL),
-          preview: SharePreview("Transaction review", image: Image(systemName: "doc"))
-        ) {
-          Image(systemName: "square.and.arrow.up").font(.system(size: 16)).frame(
+    ZStack {
+      FlowBreadcrumb(steps: ["Review", "Authorize", "Export"], current: step, compact: true)
+        .frame(maxWidth: 440)
+      HStack(spacing: 14) {
+        Button {
+          dismiss()
+        } label: {
+          Image(systemName: "xmark").font(.system(size: 13, weight: .semibold)).frame(
             width: 30, height: 30)
-        }.buttonStyle(.plain).help("Share review file").accessibilityLabel("Share review file")
-      } else {
-        Color.clear.frame(width: 30, height: 30)
+        }.buttonStyle(.plain).accessibilityLabel("Close").keyboardShortcut(.cancelAction)
+        Spacer(minLength: 4)
+        if let exportURL {
+          #if os(macOS)
+            Button("AirDrop…", systemImage: "airplayaudio") {
+              do { try MacReviewSharing.airDrop(exportURL) } catch {
+                sharingError = error.localizedDescription
+              }
+            }.buttonStyle(.borderless).accessibilityIdentifier("airDropTransactionReview")
+          #endif
+          ShareLink(
+            item: VowTransfer(url: exportURL),
+            preview: SharePreview("Transaction review", image: Image(systemName: "doc"))
+          ) {
+            Image(systemName: "square.and.arrow.up").font(.system(size: 16)).frame(
+              width: 30, height: 30)
+          }.buttonStyle(.plain).help("Share review file").accessibilityLabel("Share review file")
+        } else {
+          Color.clear.frame(width: 30, height: 30)
+        }
       }
     }.padding(.horizontal, 20).padding(.vertical, 10)
+      .alert(
+        "Could not share review",
+        isPresented: Binding(get: { sharingError != nil }, set: { if !$0 { sharingError = nil } })
+      ) {
+        Button("OK") { sharingError = nil }
+      } message: {
+        Text(sharingError ?? "")
+      }
   }
   private func reviewFooter(width: CGFloat) -> some View {
     VStack(spacing: 9) {

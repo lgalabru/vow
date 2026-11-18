@@ -805,3 +805,33 @@ Save, drag-and-drop and AirDrop remain alternative transports. A USB storage dri
 can carry the same file through the system document picker without enabling
 radios. Vow copies imported bytes into local review state, so the drive can be
 removed before a YubiKey uses the iPad's USB-C port.
+
+## Observing Squads multisigs
+
+The Mac's Multisigs view keeps a local watchlist separate from organizations,
+quorums and signing identities. Adding an address creates no membership or signing
+access. A watch pins a network and canonical multisig address; Explorer links to a
+proposal or stored configuration/vault transaction resolve to their parent multisig.
+Only the configured official Devnet and Mainnet RPC endpoints are used.
+
+Rust checks account ownership, Anchor discriminators, PDA derivations, vector
+bounds and proposal/transaction indices before exposing data to SwiftUI. The
+installed Squads v4 decoder reads members, permissions, threshold, time lock,
+proposal status/votes, configuration actions and vault instruction accounts/bytes.
+Unknown transaction kinds and missing accounts remain explicit. Address-table
+lookups are shown as unresolved and block approval preparation in this version.
+
+History is paged in groups of 32 and only the current page stays in memory. The
+latest page refreshes every minute while visible and the Mac app is active. Pending
+excludes stale proposals even when their stored enum is still Active. Preparing an
+approval re-reads membership and proposal state, rejects duplicate/stale votes,
+and constructs only the canonical unsigned Squads ProposalApprove instruction for
+the selected existing voting member. Its blockhash observation is an estimate.
+
+Preparation simulates through Surfpool, attaches the immutable stored transaction
+as a canonical account fixture, and validates the finished package with the same
+strict importer used by recipients. The first review screen therefore includes the
+stored action, not just the vote. The preparation menu can review locally or open
+the native AirDrop recipient picker with a native `.vow` document. This does not
+produce an on-chain signature or replace the remaining multisig signing adapter.
+See [ADR 0016](adr/0016-observe-multisigs-without-enrollment.md).

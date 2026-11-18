@@ -1,0 +1,62 @@
+{
+  "multisig": {
+    "address": "11111111111111111111111111111111",
+    "threshold": 1,
+    "time_lock_seconds": 0,
+    "transaction_index": 5,
+    "stale_transaction_index": 4,
+    "config_authority": null,
+    "members": [
+      {
+        "address": "SysvarRent111111111111111111111111111111111",
+        "permissions": 7,
+        "direct_signing": true
+      }
+    ]
+  },
+  "proposals": [
+    {
+      "proposal": {
+        "address": "SysvarC1ock11111111111111111111111111111111",
+        "index": 5,
+        "status": "active",
+        "timestamp_unix_seconds": 1700000000,
+        "approved": [],
+        "rejected": [],
+        "cancelled": [],
+        "stale": false
+      },
+      "transaction": {
+        "address": "Vote111111111111111111111111111111111111111",
+        "creator": "SysvarRent111111111111111111111111111111111",
+        "kind": "configuration",
+        "title": "Add member",
+        "actions": [
+          {
+            "kind": "add_member",
+            "title": "Add member",
+            "fields": [
+              {
+                "label": "Member",
+                "value": "Stake11111111111111111111111111111111111111"
+              },
+              {
+                "label": "Permissions",
+                "value": "Initiate, Vote, Execute"
+              }
+            ]
+          }
+        ],
+        "instructions": [],
+        "lookups": []
+      },
+      "detail_error": null
+    }
+  ],
+  "unavailable": 0,
+  "page_start": 5,
+  "page_size": 32,
+  "next_before": null,
+  "slot": 123456,
+  "observed_at_unix_ms": 1700000000000
+}

@@ -17,3 +17,4 @@
 | [0013](0013-pair-nearby-devices-for-review-transfer.md) | Pair nearby devices for encrypted review-file delivery | accepted |
 | [0014](0014-separate-generic-simulation-from-signing-decoders.md) | Separate generic simulation from signing decoder coverage | accepted |
 | [0015](0015-share-surfpool-runtime-between-apple-clients.md) | Share the offline Surfpool SDK runtime between Apple clients | accepted |
+| [0016](0016-observe-multisigs-without-enrollment.md) | Observe multisigs independently of signing enrollment | accepted |

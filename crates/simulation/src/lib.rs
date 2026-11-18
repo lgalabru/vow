@@ -3,9 +3,15 @@ use serde_json::Value;
 #[cfg(target_os = "macos")]
 use serde_json::json;
 pub mod clipboard;
+#[cfg(target_os = "macos")]
+mod multisigs;
 mod offline;
 
 pub fn profile(request: &Value) -> Result<Value, String> {
+    #[cfg(target_os = "macos")]
+    if request["mode"] == "multisig_watch" {
+        return multisigs::request(request);
+    }
     if request["mode"] == "offline" {
         return offline::profile(request);
     }

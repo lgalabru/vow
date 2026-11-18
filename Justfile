@@ -86,3 +86,7 @@ document-test:
 # Compile the shared SDK and C ABI for physical iPadOS.
 runtime-ios-check:
     cargo +stable check --locked -p vow-ffi --target aarch64-apple-ios
+
+# Watchlist network parsing and typed native proposal models.
+multisig-watch-test:
+    scripts/test-multisig-watch.sh

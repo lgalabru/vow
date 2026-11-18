@@ -198,6 +198,36 @@ pub fn inspect(request: &Value, chain: Chain) -> Result<Value, String> {
         let mut title = "Unknown instruction — signing blocked".to_string();
         let mut fields = vec![];
         let mut warnings = vec![];
+        if program == crate::squads::PROGRAM
+            && !unresolved
+            && ix.data.len() == 9
+            && ix.data[..8] == crate::squads::APPROVE_DISCRIMINATOR
+            && ix.data[8] == 0
+            && ix.accounts.len() == 3
+        {
+            title = "Approve Squads proposal".into();
+            let multisig = keys[ix.accounts[0] as usize].to_string();
+            let member = keys[ix.accounts[1] as usize].to_string();
+            let proposal = keys[ix.accounts[2] as usize].to_string();
+            fields.extend([
+                json!({"label":"Multisig","value":multisig}),
+                json!({"label":"Signing member","value":member}),
+                json!({"label":"Proposal account","value":proposal}),
+            ]);
+            match crate::squads::describe_approval(
+                &multisig,
+                &member,
+                &proposal,
+                &value["simulation"]["snapshot"],
+            ) {
+                Ok(details) => fields.extend(
+                    details
+                        .into_iter()
+                        .map(|f| json!({"label":f.label,"value":f.value})),
+                ),
+                Err(error) => warnings.push(error),
+            }
+        }
         if program == CHANNEL && !unresolved {
             match ix.data.first().copied() {
                 Some(1) if ix.data.len() >= 33 && ix.accounts.len() == 14 => {

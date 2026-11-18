@@ -33,7 +33,7 @@ SwiftUI supplies the native apps and hardware adapters.
 | 🖥️ **Prepare** | The Mac menu bar simulates clipboard transactions in Surfnet; the browser captures wallet requests. | Generic legacy/v0 clipboard simulation; browser preview remains limited |
 | 📦 **Transfer** | `.vow` files carry bytes, review context and fixtures. Paired nearby devices, USB storage and AirDrop can transport them. | Implemented; physical nearby acceptance ongoing |
 | 🔎 **Review** | Rust decodes instructions, binds network context and checks imported evidence. Unknown instructions and unresolved lookup tables block signing. | Limited installed decoders |
-| 🧪 **Reproduce** | Embedded Surfpool exports replay fixtures; LiteSVM independently reproduces supported results. | Synthetic state, not authenticated chain state |
+| 🧪 **Reproduce** | Both apps reproduce bundled fixtures and instruction profiles through Surfpool SDK. | Synthetic state, not authenticated chain state |
 | ✍️ **Approve** | Handwritten consent, YubiKey verification and iPad authentication protect a Secure Enclave P-256 approval. Ledger profiles use the device's Solana account. | Prototype signatures and verification; physical-device acceptance ongoing |
 | 👤 **Profiles** | Personal signing identities are separate from organization membership and project quorum seats. | Local persistence; iCloud backup is not implemented |
 | 👥 **Coordinate** | The Mac manages organizations, members, projects and reusable quorums. | Ceremony rehearsal; passport verification and pairing are unfinished |
@@ -112,6 +112,19 @@ can reproduce them in a fresh offline Surfpool SDK fork and inspect instruction
 profiles, parsed account-state diffs, raw bytes and logs. Fixtures remain unverified
 chain context; simulation never grants approval authority. Preparation has an 8 MB
 file limit.
+
+## 👀 Watched multisigs
+
+On Mac, open **Multisigs → Add Multisig** and paste a Squads address or Solana
+Explorer link. Select Devnet or Mainnet and give it a name. Vow saves the watchlist
+and retrieves proposal status, votes and the stored configuration or vault action.
+Use **Pending / All** and **Older / Newer** to browse history; stale proposals are
+identified separately from their status.
+
+Open a proposal, select the existing member who will sign, then choose **Prepare
+Approval** to inspect its unsigned transaction. The button's menu also offers
+**Prepare & AirDrop…**. AirDrop is available in the shared transaction inspector
+too. Preparation and transfer do not produce an on-chain signature.
 
 ## 🔑 Signing profiles
 

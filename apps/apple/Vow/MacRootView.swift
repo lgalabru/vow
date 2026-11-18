@@ -2,7 +2,7 @@
   import SwiftUI
 
   private enum MacSection: String, CaseIterable, Identifiable {
-    case overview, members, safeguards, review, requests, browser, profiles
+    case overview, members, safeguards, review, requests, browser, profiles, multisigs
     var id: String { rawValue }
     var title: String {
       switch self {
@@ -12,6 +12,7 @@
       case .review: "Review ceremony"
       case .requests: "Requests"
       case .profiles: "Profiles"
+      case .multisigs: "Multisigs"
       case .browser: "Browser"
       }
     }
@@ -23,6 +24,7 @@
       case .review: "checklist"
       case .requests: "tray"
       case .profiles: "person.crop.rectangle.stack"
+      case .multisigs: "lock.shield"
       case .browser: "globe"
       }
     }
@@ -59,6 +61,10 @@
             NavigationLink(value: MacSection.profiles) {
               Label("Profiles", systemImage: "person.crop.rectangle.stack")
             }.accessibilityIdentifier("mac-profiles")
+            NavigationLink(value: MacSection.multisigs) {
+              Label("Multisigs", systemImage: "lock.shield")
+            }
+            .accessibilityIdentifier("mac-multisigs")
             NavigationLink(value: MacSection.requests) { Label("Requests", systemImage: "tray") }
             NavigationLink(value: MacSection.browser) { Label("Browser", systemImage: "globe") }
           }
@@ -87,6 +93,8 @@
                 openQuorums: { selection = .safeguards },
                 createProject: { creatingWorkspace = .project },
                 createOrganization: { creatingWorkspace = .organization })
+            } else if selected == .multisigs {
+              ObservedMultisigsView(model: model)
             } else if selected == .browser {
               MacBrowserView(model: model).id("\(state.organizationId)/\(state.projectId)")
             } else {
@@ -98,7 +106,7 @@
                 case .safeguards: safeguards(state)
                 case .review: review(state)
                 case .requests: requests(state)
-                case .browser, .profiles: EmptyView()
+                case .browser, .profiles, .multisigs: EmptyView()
                 }
               }
 
@@ -112,7 +120,7 @@
         .navigationTitle("")
         .toolbar {
           ToolbarItemGroup(placement: .primaryAction) {
-            if let state = model.state {
+            if let state = model.state, selected != .multisigs {
               if selected == .requests, state.proposal != nil {
                 Button("Export Request", systemImage: "square.and.arrow.up", action: exportRequest)
               }
@@ -143,6 +151,13 @@
               .help("Workspace options")
             }
           }
+        }
+      }
+      .onAppear {
+        if ProcessInfo.processInfo.arguments.contains("--watch-multisig")
+          || ProcessInfo.processInfo.arguments.contains("--ui-test-observed-multisig")
+        {
+          selection = .multisigs
         }
       }
       #if DEBUG

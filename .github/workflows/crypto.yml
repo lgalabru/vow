@@ -3,9 +3,9 @@ name: Cryptography
 on:
   push:
     branches: [main]
-    paths: ['crates/**', 'vendor/**', 'Cargo.toml', 'Cargo.lock', '.github/workflows/crypto.yml', 'Justfile', 'apps/apple/Vow/PIVPINPolicy.swift', 'apps/apple/Vow/PIVSetupCoordinator.swift', 'apps/apple/PolicyTests/**', 'scripts/test-piv-pin-policy.sh', 'scripts/test-nearby-protocol.sh', 'apps/apple/Vow/NearbyProtocol.swift', 'apps/apple/NearbyProtocolTests/**', 'apps/apple/Vow/VowDocument.swift', 'apps/apple/DocumentPackageTests/**', 'scripts/test-document-package.sh']
+    paths: ['crates/**', 'vendor/**', 'Cargo.toml', 'Cargo.lock', '.github/workflows/crypto.yml', 'Justfile', 'apps/apple/Vow/PIVPINPolicy.swift', 'apps/apple/Vow/PIVSetupCoordinator.swift', 'apps/apple/PolicyTests/**', 'scripts/test-piv-pin-policy.sh', 'scripts/test-nearby-protocol.sh', 'apps/apple/Vow/NearbyProtocol.swift', 'apps/apple/NearbyProtocolTests/**', 'apps/apple/Vow/VowDocument.swift', 'apps/apple/DocumentPackageTests/**', 'scripts/test-document-package.sh', 'apps/apple/Vow/ObservedMultisigModels.swift', 'apps/apple/MultisigWatchTests/**', 'apps/apple/Vow/Web/ObservedMultisigFixture.json', 'scripts/test-multisig-watch.sh']
   pull_request:
-    paths: ['crates/**', 'vendor/**', 'Cargo.toml', 'Cargo.lock', '.github/workflows/crypto.yml', 'Justfile', 'apps/apple/Vow/PIVPINPolicy.swift', 'apps/apple/Vow/PIVSetupCoordinator.swift', 'apps/apple/PolicyTests/**', 'scripts/test-piv-pin-policy.sh', 'scripts/test-nearby-protocol.sh', 'apps/apple/Vow/NearbyProtocol.swift', 'apps/apple/NearbyProtocolTests/**', 'apps/apple/Vow/VowDocument.swift', 'apps/apple/DocumentPackageTests/**', 'scripts/test-document-package.sh']
+    paths: ['crates/**', 'vendor/**', 'Cargo.toml', 'Cargo.lock', '.github/workflows/crypto.yml', 'Justfile', 'apps/apple/Vow/PIVPINPolicy.swift', 'apps/apple/Vow/PIVSetupCoordinator.swift', 'apps/apple/PolicyTests/**', 'scripts/test-piv-pin-policy.sh', 'scripts/test-nearby-protocol.sh', 'apps/apple/Vow/NearbyProtocol.swift', 'apps/apple/NearbyProtocolTests/**', 'apps/apple/Vow/VowDocument.swift', 'apps/apple/DocumentPackageTests/**', 'scripts/test-document-package.sh', 'apps/apple/Vow/ObservedMultisigModels.swift', 'apps/apple/MultisigWatchTests/**', 'apps/apple/Vow/Web/ObservedMultisigFixture.json', 'scripts/test-multisig-watch.sh']
   workflow_dispatch:
 
 permissions:
@@ -44,6 +44,7 @@ jobs:
       - run: just runtime-ios-check
       - run: just nearby-test
       - run: just document-test
+      - run: just multisig-watch-test
 
   pin-policy:
     runs-on: macos-latest

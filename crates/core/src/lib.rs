@@ -9,6 +9,7 @@ pub mod metadata;
 pub mod native_webauthn;
 pub mod personal_identity;
 pub mod profiles;
+pub mod squads;
 pub mod transaction;
 
 use p256::ecdsa::{Signature, VerifyingKey, signature::Verifier};
@@ -723,16 +724,23 @@ impl Session {
             "snapshot" => {}
             "browser_fixture" => return self.browser_fixture(),
             "inspect_transaction_dump" => {
-                let chain = self.active_chain().or_else(|_| {
-                    let value: Value = serde_json::from_str(text(request, "data")?).map_err(
-                        |_| "Select a network or import a Vow file with network context.",
-                    )?;
-                    match value["chain"].as_str() {
-                        Some("solana:devnet") => Ok(Chain::Devnet),
-                        Some("solana:mainnet") => Ok(Chain::Mainnet),
-                        _ => Err("The review file needs explicit network context.".to_owned()),
+                let chain = match request.get("chain") {
+                    Some(Value::String(id)) if id == "solana:devnet" => Chain::Devnet,
+                    Some(Value::String(id)) if id == "solana:mainnet" => Chain::Mainnet,
+                    Some(_) => {
+                        return Err("Choose Devnet or Mainnet for transaction inspection.".into());
                     }
-                })?;
+                    None => self.active_chain().or_else(|_| {
+                        let value: Value = serde_json::from_str(text(request, "data")?).map_err(
+                            |_| "Select a network or import a Vow file with network context.",
+                        )?;
+                        match value["chain"].as_str() {
+                            Some("solana:devnet") => Ok(Chain::Devnet),
+                            Some("solana:mainnet") => Ok(Chain::Mainnet),
+                            _ => Err("The review file needs explicit network context.".to_owned()),
+                        }
+                    })?,
+                };
                 let inspection = inspection::inspect(request, chain)?;
                 self.changed();
                 return Ok(inspection);
@@ -1630,6 +1638,29 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn independent_inspection_requires_explicit_chain_and_cannot_retarget_a_project() {
+        let mut session = Session::default();
+        let project_chain = session.active_chain().unwrap();
+        let other = if project_chain == Chain::Devnet {
+            Chain::Mainnet
+        } else {
+            Chain::Devnet
+        };
+        let input = inspection::channel_fixture(other, None, 1)
+            .unwrap()
+            .to_string();
+        assert!(
+            session
+                .dispatch(&json!({"action":"inspect_transaction_dump","data":input}))
+                .is_err()
+        );
+        let result=session.dispatch(&json!({"action":"inspect_transaction_dump","data":input,"chain":other.wallet_id()})).unwrap();
+        assert_eq!(result["chain"]["id"], other.wallet_id());
+        assert_eq!(result["execution_ready"], false);
+        assert_eq!(session.active_chain().unwrap(), project_chain);
+        assert!(session.dispatch(&json!({"action":"inspect_transaction_dump","data":input,"chain":project_chain.wallet_id()})).is_err());
+    }
     use p256::ecdsa::{SigningKey, signature::Signer};
     #[test]
     fn deleting_projects_cancels_signing_but_keeps_shared_members_and_quorums() {

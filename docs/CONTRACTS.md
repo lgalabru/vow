@@ -576,3 +576,37 @@ from the same local execution profile with `jsonParsed` encoding; metadata must
 match its base64 counterpart. Unsupported account data retains its length/hash
 and the original profile bytes for a complete paginated hex diff. Large integers
 are preserved without conversion through floating point.
+
+## Connected multisig observation
+
+The Mac-only, session-free profiling bridge accepts `mode: "multisig_watch"`, an
+explicit `chain` (`solana:devnet` or `solana:mainnet`) and `address`. Operations:
+
+- `resolve`: return `multisig`, `chain` and RPC `slot`; supported Squads account
+  links resolve to their canonical parent multisig.
+- `fetch`: return the verified `multisig`, `proposals`, unavailable-account count,
+  `page_start`, `page_size`, optional `next_before`, RPC `slot` and observation time.
+  Optional `before` is an exclusive transaction-index cursor. A page requests at
+  most 32 proposals and their paired transaction PDAs in one 64-account batch.
+- `prepare_approval`: require `index` and a voting `member`. Re-read current state,
+  reject stale/inactive/already-approved proposals, off-curve members requiring
+  a controlling program, and unresolved lookup tables,
+  then return the normal connected capture response with a fresh unsigned vote.
+
+The account decoder is pinned to Squads v4 source commit
+`3a39735d0c56249bf2ce4b16b3229d7be87ad55f`. Inspection bounds are 64 KiB per account,
+256 members/voters/account indices, 32 configuration actions and 128 vault
+instructions. Unsupported data is never rendered as an empty successful action.
+RPC account metadata is converted to the strict `AccountSnapshot` type before
+attachment; fields such as RPC `space` do not enter fixture objects.
+
+The Mac stores at most 32 watched addresses in `vow.observed-multisigs.v1`, bounded
+to 32 KiB of JSON. Entries contain only name, canonical address and network. They
+are presentation metadata and do not establish organization/profile membership.
+The native URL parser accepts only Solana Explorer address links; a custom Explorer
+endpoint must exactly identify a supported official RPC, never a new destination.
+
+For independent read-only review, `inspect_transaction_dump` accepts an explicit
+request `chain`. It validates the envelope against that chain and cancels pending
+authorization, without retargeting the selected project. Existing project-bound
+approval actions retain their original chain checks.
